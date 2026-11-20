@@ -1,8 +1,9 @@
 import type { AppVersionInfo } from '../types';
 import { socketService } from './socketService';
+import { APP_VERSION, APP_VERSION_CODE } from '../version';
 
-export const CURRENT_APP_VERSION = '1.0.0';
-export const CURRENT_VERSION_CODE = 1;
+export const CURRENT_APP_VERSION = APP_VERSION;
+export const CURRENT_VERSION_CODE = APP_VERSION_CODE;
 
 export class UpdateService {
   private lastChecked: number = 0;

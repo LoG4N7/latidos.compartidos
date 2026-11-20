@@ -76,28 +76,64 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // Latest Version and In-App Updater Endpoint
-const APP_VERSION_INFO = {
-  version: '1.1.0',
-  versionCode: 2,
+const DEFAULT_VERSION_INFO = {
+  version: '1.2.0',
+  versionCode: 10,
   releaseDate: '2026-11-20',
-  title: 'Actualización Automática 24/7 y Sincronización Directa',
+  title: 'Actualización con Clave Única y Versión Auto-Incremental',
   releaseNotes: [
-    'Transmisión continua 24/7 de los latidos de Demian a Verónica usando el widget de Pulsoid (funciona incluso con la app cerrada).',
-    'Actualizaciones automáticas dentro de la app con un solo toque.',
-    'Reconexión ultrarrápida y calibración táctil optimizada.',
-    'Modo exclusivo para Demian (transmisor) y Verónica (receptora).'
+    'Firma digital permanente (soluciona conflictos de paquete al actualizar).',
+    'Incremento automático del número de versión en cada compilación.',
+    'Transmisión continua 24/7 de los latidos de Demian a Verónica usando el widget de Pulsoid.',
+    'Actualizaciones automáticas dentro de la app con un solo toque.'
   ],
   apkDownloadUrl: 'https://github.com/LoG4N7/latidos.compartidos/releases/latest/download/Latidos-Compartidos.apk',
   isMandatory: false
 };
 
-app.get('/api/version', (_req: Request, res: Response) => {
-  res.json(APP_VERSION_INFO);
+let cachedVersionInfo = { ...DEFAULT_VERSION_INFO };
+let lastVersionCheckTime = 0;
+
+async function fetchLatestReleaseVersion(): Promise<typeof DEFAULT_VERSION_INFO> {
+  const now = Date.now();
+  if (now - lastVersionCheckTime < 60000) {
+    return cachedVersionInfo;
+  }
+
+  try {
+    const res = await fetch('https://github.com/LoG4N7/latidos.compartidos/releases/latest', {
+      redirect: 'manual'
+    });
+    const loc = res.headers.get('location') || '';
+    const match = loc.match(/tag\/(?:v)?([0-9\.]+)/);
+    if (match && match[1]) {
+      const ver = match[1];
+      const parts = ver.split('.');
+      const runNum = parseInt(parts[parts.length - 1], 10);
+      const code = isNaN(runNum) ? 10 : (100 + runNum);
+
+      cachedVersionInfo = {
+        ...DEFAULT_VERSION_INFO,
+        version: ver,
+        versionCode: code
+      };
+      lastVersionCheckTime = now;
+    }
+  } catch (err) {
+    // Return cached on network error
+  }
+
+  return cachedVersionInfo;
+}
+
+app.get('/api/version', async (_req: Request, res: Response) => {
+  const info = await fetchLatestReleaseVersion();
+  res.json(info);
 });
 
 // Direct APK download redirect (for 1-click update from any browser or in-app)
 app.get('/download/apk', (_req: Request, res: Response) => {
-  res.redirect(APP_VERSION_INFO.apkDownloadUrl);
+  res.redirect(DEFAULT_VERSION_INFO.apkDownloadUrl);
 });
 
 // Pulsoid Bridge Status and Configuration Endpoints

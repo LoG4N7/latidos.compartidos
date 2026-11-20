@@ -36,6 +36,18 @@ jobs:
           npm --prefix backend install
           npm --prefix frontend install
 
+      - name: Configurar Versión Dinámica Auto-Incremental
+        run: |
+          BUILD_NUM=$((100 + ${{ github.run_number }}))
+          VERSION_NAME="1.2.${{ github.run_number }}"
+          echo "VERSION_CODE=$BUILD_NUM" >> $GITHUB_ENV
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "export const APP_VERSION = '$VERSION_NAME';" > frontend/src/version.ts
+          echo "export const APP_VERSION_CODE = $BUILD_NUM;" >> frontend/src/version.ts
+          echo "VERSION_CODE=$BUILD_NUM" > frontend/android/app/version.properties
+          echo "VERSION_NAME=$VERSION_NAME" >> frontend/android/app/version.properties
+          echo "Compilando Latidos Compartidos v$VERSION_NAME (Build $BUILD_NUM)"
+
       - name: Compilar Frontend Vite
         run: npm --prefix frontend run build
 
@@ -65,16 +77,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: latest
-          name: "Latidos Compartidos APK (Última Versión)"
+          tag_name: v${{ env.VERSION_NAME }}
+          name: "Latidos Compartidos v${{ env.VERSION_NAME }} (Build ${{ env.VERSION_CODE }})"
           body: |
             ❤️ **Latidos Compartidos - Demian y Verónica**
+
+            Versión: **v${{ env.VERSION_NAME }}** (Build ${{ env.VERSION_CODE }})
 
             Descarga directa del APK para instalar en tu teléfono Android:
             - Pulsa en **`Latidos-Compartidos.apk`** para descargar directamente.
             - Al finalizar la descarga, toca la notificación y presiona **Actualizar**.
 
-            ✨ *Incluye sincronización 24/7 con Xiaomi Smart Band 9 y widget de Pulsoid.*
+            ✨ *Firmado con clave única permanente para permitir actualizaciones directas sin conflicto de paquetes.*
           files: Latidos-Compartidos.apk
           prerelease: false
           make_latest: true
