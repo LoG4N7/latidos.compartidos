@@ -26,7 +26,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [hapticsOn, setHapticsOn] = useState<boolean>(hapticsAudio.isHapticActive());
   const [audioOn, setAudioOn] = useState<boolean>(hapticsAudio.isAudioActive());
   const [wakeActive, setWakeActive] = useState<boolean>(wakeLock.isActive());
-  const [serverUrl, setServerUrl] = useState<string>(() => socketService.getServerUrl() || 'http://192.168.0.5:3001');
+  const [serverUrl, setServerUrl] = useState<string>(() => socketService.getServerUrl() || socketService.getEffectiveServerUrl());
   const [urlSaved, setUrlSaved] = useState<boolean>(false);
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Watch, Bell, Key, HeartHandshake, Check, Sparkles, ExternalLink, Sliders, Globe, Radio } from 'lucide-react';
 import { pulsoidService, HeartSourceMode } from '../services/pulsoidService';
+import { socketService } from '../services/socketService';
 import { hapticsAudio } from '../utils/hapticsAudio';
 
 interface PulsoidConfigModalProps {
@@ -33,8 +34,8 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
       setBaseBpm(pulsoidService.getBaseBpm());
 
       // Fetch server bridge status
-      const serverUrl = localStorage.getItem('latidos_server_url') || '';
-      const endpoint = serverUrl ? `${serverUrl.replace(/\/$/, '')}/api/pulsoid/status` : '/api/pulsoid/status';
+      const serverUrl = socketService.getEffectiveServerUrl();
+      const endpoint = `${serverUrl}/api/pulsoid/status`;
       fetch(endpoint)
         .then(r => r.json())
         .then(data => {

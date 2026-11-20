@@ -9,6 +9,8 @@ import type {
 
 type Listener<T> = (data: T) => void;
 
+export const DEFAULT_SERVER_URL = 'https://latidos-compartidos.onrender.com';
+
 class SocketService {
   private socket: Socket | null = null;
   private currentPin: string = '1402';
@@ -21,6 +23,32 @@ class SocketService {
   private ppgWaveformListeners: Set<Listener<PPGWaveSamplePayload>> = new Set();
   private partnerStatusListeners: Set<Listener<UserStatusPayload>> = new Set();
   private connectionChangeListeners: Set<Listener<boolean>> = new Set();
+
+  public getEffectiveServerUrl(): string {
+    const customUrl = typeof window !== 'undefined' ? localStorage.getItem('latidos_server_url') : null;
+    if (customUrl && customUrl.trim()) {
+      return customUrl.trim().replace(/\/$/, '');
+    }
+
+    if (import.meta.env.VITE_BACKEND_URL) {
+      return import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '');
+    }
+
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      // Local development inside PC browser with Vite dev server (port 5173)
+      if ((host === 'localhost' || host === '127.0.0.1') && window.location.port === '5173') {
+        return 'http://localhost:3001';
+      }
+      // Running on Render web domain
+      if (host.includes('onrender.com')) {
+        return window.location.origin;
+      }
+    }
+
+    // Default to production cloud server for Android APK and remote testing
+    return DEFAULT_SERVER_URL;
+  }
 
   /**
    * Initializes socket connection
@@ -36,17 +64,11 @@ class SocketService {
       return;
     }
 
-    // Determine backend URL (from custom localStorage, env, or fallback to port 3001)
-    const customUrl = typeof window !== 'undefined' ? localStorage.getItem('latidos_server_url') : null;
-    const backendUrl = customUrl || import.meta.env.VITE_BACKEND_URL || (
-      typeof window !== 'undefined'
-        ? `${window.location.protocol}//${window.location.hostname}:3001`
-        : 'http://localhost:3001'
-    );
+    const backendUrl = this.getEffectiveServerUrl();
 
     this.socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 15,
+      reconnectionAttempts: 20,
       reconnectionDelay: 1000
     });
 

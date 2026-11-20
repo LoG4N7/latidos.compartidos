@@ -105,6 +105,29 @@ app.get('/api/pulsoid/status', (_req: Request, res: Response) => {
   res.json(pulsoidBridge.getStatus());
 });
 
+app.get('/api/pulsoid/resolve', async (req: Request, res: Response) => {
+  const widgetId = (req.query.widget as string) || 'latidos-compartidos';
+  try {
+    const rpcRes = await fetch('https://pulsoid.net/v1/api/public/rpc', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-rpc-method': 'getWidget'
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'getWidget',
+        params: { widgetId },
+        id: '1'
+      })
+    });
+    const rpcData = await rpcRes.json();
+    return res.json(rpcData);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/pulsoid/widget', (req: Request, res: Response) => {
   const { widget, widgetUrl, widgetId } = req.body;
   const target = widget || widgetUrl || widgetId;

@@ -83,6 +83,29 @@ app.get('/download/apk', (_req, res) => {
 app.get('/api/pulsoid/status', (_req, res) => {
     res.json(pulsoidBridge.getStatus());
 });
+app.get('/api/pulsoid/resolve', async (req, res) => {
+    const widgetId = req.query.widget || 'latidos-compartidos';
+    try {
+        const rpcRes = await fetch('https://pulsoid.net/v1/api/public/rpc', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-rpc-method': 'getWidget'
+            },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'getWidget',
+                params: { widgetId },
+                id: '1'
+            })
+        });
+        const rpcData = await rpcRes.json();
+        return res.json(rpcData);
+    }
+    catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
 app.post('/api/pulsoid/widget', (req, res) => {
     const { widget, widgetUrl, widgetId } = req.body;
     const target = widget || widgetUrl || widgetId;

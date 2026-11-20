@@ -1,4 +1,5 @@
 import type { AppVersionInfo } from '../types';
+import { socketService } from './socketService';
 
 export const CURRENT_APP_VERSION = '1.0.0';
 export const CURRENT_VERSION_CODE = 1;
@@ -19,10 +20,8 @@ export class UpdateService {
     }
 
     try {
-      const serverUrl = localStorage.getItem('latidos_server_url') || '';
-      const endpoint = serverUrl
-        ? `${serverUrl.replace(/\/$/, '')}/api/version`
-        : '/api/version';
+      const serverUrl = socketService.getEffectiveServerUrl();
+      const endpoint = `${serverUrl}/api/version`;
 
       const res = await fetch(endpoint, {
         headers: { 'Cache-Control': 'no-cache' }
@@ -59,7 +58,7 @@ export class UpdateService {
 
   public downloadAndInstall(downloadUrl?: string): void {
     const targetUrl = downloadUrl || (
-      (localStorage.getItem('latidos_server_url') || '').replace(/\/$/, '') + '/download/apk'
+      `${socketService.getEffectiveServerUrl()}/download/apk`
     ) || 'https://github.com/LoG4N7/latidos.compartidos/releases/latest/download/Latidos-Compartidos.apk';
 
     // On Capacitor / Android, opening in system browser triggers Android Package Installer

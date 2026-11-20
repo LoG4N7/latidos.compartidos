@@ -82,7 +82,30 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
         });
       });
 
-      return () => unsubscribePulsoid();
+      // Also listen to incoming live pulse from server Pulsoid bridge
+      const unsubSocket = socketService.onBandHeartbeat((payload: HeartbeatPayload) => {
+        if (payload.userId === 'Demian') {
+          setDemianBpm(payload.bpm);
+          setDemianSourceStatus('🟢 En vivo desde Pulsoid (Xiaomi Band 9)');
+        }
+      });
+
+      // Quick fetch of server bridge on mount
+      const serverUrl = socketService.getEffectiveServerUrl();
+      fetch(`${serverUrl}/api/pulsoid/status`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.lastBpm && (Date.now() - (data.lastSeen || 0) < 180000)) {
+            setDemianBpm(data.lastBpm);
+            setDemianSourceStatus(`🟢 En vivo desde Pulsoid (${data.lastBpm} BPM)`);
+          }
+        })
+        .catch(() => {});
+
+      return () => {
+        unsubscribePulsoid();
+        unsubSocket();
+      };
     }
   }, [isDemian, skinTemp.celsius]);
 
@@ -101,7 +124,7 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
           }
           setDemianSourceStatus(
             payload.source === 'pulsoid'
-              ? 'En vivo desde Pulsoid (Xiaomi Band 9)'
+              ? '🟢 En vivo desde Pulsoid (Xiaomi Band 9)'
               : payload.source === 'notification'
               ? 'En vivo desde Notificación Pulsoid (Mi Band 9)'
               : 'Último latido de Demian'
@@ -111,14 +134,13 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
       });
 
       // Quick fetch of server Pulsoid bridge for instant BPM display
-      const serverUrl = localStorage.getItem('latidos_server_url') || '';
-      const endpoint = serverUrl ? `${serverUrl.replace(/\/$/, '')}/api/pulsoid/status` : '/api/pulsoid/status';
-      fetch(endpoint)
+      const serverUrl = socketService.getEffectiveServerUrl();
+      fetch(`${serverUrl}/api/pulsoid/status`)
         .then(r => r.json())
         .then(data => {
           if (data && data.lastBpm && (Date.now() - (data.lastSeen || 0) < 180000)) {
             setDemianBpm(data.lastBpm);
-            setDemianSourceStatus('En vivo desde Pulsoid (Xiaomi Band 9)');
+            setDemianSourceStatus('🟢 En vivo desde Pulsoid (Xiaomi Band 9)');
             setIsPartnerConnected(true);
           }
         })

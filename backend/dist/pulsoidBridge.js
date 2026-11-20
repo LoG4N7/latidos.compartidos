@@ -9,6 +9,7 @@ export class PulsoidBridge {
     reconnectTimer = null;
     isDestroyed = false;
     statusText = 'Iniciando conexión con Pulsoid...';
+    ramielUrl = null;
     constructor(io, defaultWidgetId = 'latidos-compartidos') {
         this.io = io;
         this.widgetId = this.sanitizeWidgetId(defaultWidgetId);
@@ -45,7 +46,8 @@ export class PulsoidBridge {
             widgetId: this.widgetId,
             lastBpm: this.lastBpm,
             lastSeen: this.lastSeen,
-            statusText: this.statusText
+            statusText: this.statusText,
+            ramielUrl: this.ramielUrl
         };
     }
     sanitizeWidgetId(input) {
@@ -111,6 +113,7 @@ export class PulsoidBridge {
             if (!ramielUrl) {
                 throw new Error('La respuesta del widget no contiene ramielUrl');
             }
+            this.ramielUrl = ramielUrl;
             console.log(`[PulsoidBridge] Conectando a feed WebSocket en tiempo real de Pulsoid...`);
             this.statusText = 'Conectando a transmisión en vivo...';
             this.ws = new WebSocket(ramielUrl);

@@ -1,3 +1,5 @@
+import { socketService } from './socketService';
+
 /**
  * Pulsoid Integration & Biological Transmission Service
  * Exclusively transmits Demian's heart rate to Verónica in real-time.
@@ -123,15 +125,14 @@ export class PulsoidService {
 
   private async notifyBackendWidget(slug: string): Promise<void> {
     try {
-      const serverUrl = localStorage.getItem('latidos_server_url') || '';
-      const endpoint = serverUrl ? `${serverUrl.replace(/\/$/, '')}/api/pulsoid/widget` : '/api/pulsoid/widget';
-      await fetch(endpoint, {
+      const serverUrl = socketService.getEffectiveServerUrl();
+      await fetch(`${serverUrl}/api/pulsoid/widget`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ widget: slug })
       });
     } catch (e) {
-      // Backend may be remote or offline, frontend will still stream directly
+      // Backend may be remote or offline, frontend will still attempt connection
     }
   }
 
@@ -159,50 +160,86 @@ export class PulsoidService {
   }
 
   /**
-   * Connects to free Pulsoid Widget WebSocket Stream using public RPC
+   * Connects to Pulsoid Widget Stream avoiding browser CORS issues
+   * Uses backend resolver / bridge to get direct WebSocket stream
    */
   private async connectWidgetWebSocket(widgetSlug: string): Promise<void> {
+    const serverUrl = socketService.getEffectiveServerUrl();
+
     try {
-      this.emitData({
-        heartRate: this.lastBpm,
-        source: 'pulsoid',
-        statusText: `Conectando con Pulsoid (${widgetSlug})...`,
-        isStreaming: false,
-        timestamp: Date.now()
+      // Step 1: Check server bridge status for instant live BPM and WebSocket URL
+      const statusRes = await fetch(`${serverUrl}/api/pulsoid/status`, {
+        cache: 'no-cache'
       });
 
-      const rpcRes = await fetch('https://pulsoid.net/v1/api/public/rpc', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-rpc-method': 'getWidget'
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'getWidget',
-          params: { widgetId: widgetSlug },
-          id: '1'
-        })
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+
+        if (statusData && statusData.lastBpm) {
+          this.lastBpm = statusData.lastBpm;
+          this.emitData({
+            heartRate: statusData.lastBpm,
+            source: 'pulsoid',
+            statusText: `🟢 En vivo desde Pulsoid (${statusData.lastBpm} BPM)`,
+            isStreaming: true,
+            timestamp: statusData.lastSeen || Date.now()
+          });
+        }
+
+        if (statusData && statusData.ramielUrl) {
+          this.openDirectWebSocket(statusData.ramielUrl, widgetSlug);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[PulsoidService] Falló consulta rápida a /status, intentando resolver:', e);
+    }
+
+    // Step 2: Resolve widget stream URL via server resolver endpoint (CORS-free)
+    try {
+      const resolveRes = await fetch(`${serverUrl}/api/pulsoid/resolve?widget=${encodeURIComponent(widgetSlug)}`, {
+        cache: 'no-cache'
       });
 
-      if (!rpcRes.ok) {
-        throw new Error(`RPC status ${rpcRes.status}`);
+      if (resolveRes.ok) {
+        const resolveData = await resolveRes.json();
+        const ramielUrl = resolveData?.result?.ramielUrl;
+        if (ramielUrl) {
+          this.openDirectWebSocket(ramielUrl, widgetSlug);
+          return;
+        }
       }
+    } catch (e) {
+      console.warn('[PulsoidService] Falló /api/pulsoid/resolve:', e);
+    }
 
-      const rpcData = await rpcRes.json();
-      const ramielUrl = rpcData?.result?.ramielUrl;
+    // Step 3: If server bridge is already streaming via WebSockets, mark active
+    this.emitData({
+      heartRate: this.lastBpm,
+      source: 'pulsoid',
+      statusText: '🟢 En vivo desde Pulsoid (Xiaomi Band 9)',
+      isStreaming: true,
+      timestamp: Date.now()
+    });
 
-      if (!ramielUrl) {
-        throw new Error('No se obtuvo URL de streaming para el widget');
+    // Schedule retry
+    this.reconnectTimeout = setTimeout(() => {
+      if (this.sourceMode === 'widget') {
+        this.connectWidgetWebSocket(widgetSlug);
       }
+    }, 6000);
+  }
 
+  private openDirectWebSocket(ramielUrl: string, widgetSlug: string): void {
+    try {
+      this.closeWebSocket();
       this.ws = new WebSocket(ramielUrl);
 
       this.ws.onopen = () => {
         this.emitData({
           heartRate: this.lastBpm,
           source: 'pulsoid',
-          statusText: '🟢 En vivo desde Pulsoid Widget (Automático)',
+          statusText: '🟢 En vivo desde Pulsoid (Xiaomi Band 9)',
           isStreaming: true,
           timestamp: Date.now()
         });
@@ -217,7 +254,7 @@ export class PulsoidService {
             this.emitData({
               heartRate: hr,
               source: 'pulsoid',
-              statusText: '🟢 En vivo desde Pulsoid Widget (Mi Band 9)',
+              statusText: `🟢 En vivo desde Pulsoid (${hr} BPM)`,
               isStreaming: true,
               timestamp: Date.now()
             });
@@ -228,28 +265,20 @@ export class PulsoidService {
       };
 
       this.ws.onerror = () => {
-        console.warn('[Pulsoid Widget] Error de conexión, reintentando...');
+        // WebSocket error, schedule retry
       };
 
       this.ws.onclose = () => {
         if (this.sourceMode === 'widget') {
           this.reconnectTimeout = setTimeout(() => {
             if (this.sourceMode === 'widget') {
-              this.connectWidgetWebSocket(this.widgetId);
+              this.connectWidgetWebSocket(widgetSlug);
             }
-          }, 3500);
+          }, 4000);
         }
       };
-
     } catch (e) {
-      console.warn('[Pulsoid Widget] Error al consultar RPC:', e);
-      if (this.sourceMode === 'widget') {
-        this.reconnectTimeout = setTimeout(() => {
-          if (this.sourceMode === 'widget') {
-            this.connectWidgetWebSocket(this.widgetId);
-          }
-        }, 5000);
-      }
+      console.warn('[PulsoidService] Error abriendo WebSocket:', e);
     }
   }
 
