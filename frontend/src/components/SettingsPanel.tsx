@@ -1,8 +1,9 @@
-import React from 'react';
-import { Vibrate, Volume2, ShieldCheck, Watch, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Vibrate, Volume2, ShieldCheck, Watch, Download, Server, Check } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { hapticsAudio } from '../utils/hapticsAudio';
 import { wakeLock } from '../utils/wakeLock';
+import { socketService } from '../services/socketService';
 
 interface SettingsPanelProps {
   currentUser: UserProfile;
@@ -19,9 +20,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onOpenProfileModal,
   onOpenPulsoidModal
 }) => {
-  const [hapticsOn, setHapticsOn] = React.useState<boolean>(hapticsAudio.isHapticActive());
-  const [audioOn, setAudioOn] = React.useState<boolean>(hapticsAudio.isAudioActive());
-  const [wakeActive, setWakeActive] = React.useState<boolean>(wakeLock.isActive());
+  const [hapticsOn, setHapticsOn] = useState<boolean>(hapticsAudio.isHapticActive());
+  const [audioOn, setAudioOn] = useState<boolean>(hapticsAudio.isAudioActive());
+  const [wakeActive, setWakeActive] = useState<boolean>(wakeLock.isActive());
+  const [serverUrl, setServerUrl] = useState<string>(() => socketService.getServerUrl() || 'http://192.168.0.5:3001');
+  const [urlSaved, setUrlSaved] = useState<boolean>(false);
+
+  const handleSaveServerUrl = () => {
+    socketService.setServerUrl(serverUrl);
+    setUrlSaved(true);
+    hapticsAudio.vibrateSingleBeat(40);
+    setTimeout(() => setUrlSaved(false), 1500);
+  };
 
   const handleToggleHaptics = () => {
     const next = !hapticsOn;
@@ -153,6 +163,32 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 wakeActive ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
+          </button>
+        </div>
+      </div>
+
+      {/* Server URL configuration for local testing and production */}
+      <div className="glass-panel rounded-2xl p-4 border border-rose-900/40 space-y-2.5">
+        <div className="flex items-center space-x-2 text-rose-300 font-bold">
+          <Server className="w-4 h-4 text-rose-400" />
+          <span>Servidor de Conexión (Backend)</span>
+        </div>
+        <p className="text-[10px] text-rose-300/70 leading-snug">
+          IP de tu PC en red WiFi o tu enlace en la nube (ej: Render/Railway).
+        </p>
+        <div className="flex items-center space-x-2">
+          <input
+            type="text"
+            value={serverUrl}
+            onChange={(e) => setServerUrl(e.target.value)}
+            placeholder="http://192.168.0.5:3001"
+            className="flex-1 bg-black/60 border border-rose-900/50 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-rose-400"
+          />
+          <button
+            onClick={handleSaveServerUrl}
+            className="px-3 py-2 bg-gradient-to-r from-rose-600 to-rose-700 text-white rounded-xl font-bold active:scale-95 transition flex items-center space-x-1"
+          >
+            {urlSaved ? <Check className="w-3.5 h-3.5 text-white" /> : <span>Guardar</span>}
           </button>
         </div>
       </div>

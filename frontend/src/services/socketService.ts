@@ -36,8 +36,9 @@ class SocketService {
       return;
     }
 
-    // Determine backend URL (from env or fallback to current origin / port 3001)
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || (
+    // Determine backend URL (from custom localStorage, env, or fallback to port 3001)
+    const customUrl = typeof window !== 'undefined' ? localStorage.getItem('latidos_server_url') : null;
+    const backendUrl = customUrl || import.meta.env.VITE_BACKEND_URL || (
       typeof window !== 'undefined'
         ? `${window.location.protocol}//${window.location.hostname}:3001`
         : 'http://localhost:3001'
@@ -85,6 +86,29 @@ class SocketService {
     if (this.socket && this.socket.connected) {
       this.socket.emit('join_room', { pin, user });
     }
+  }
+
+  public setServerUrl(url: string): void {
+    const cleanUrl = url.trim();
+    if (typeof window !== 'undefined') {
+      if (cleanUrl) {
+        localStorage.setItem('latidos_server_url', cleanUrl);
+      } else {
+        localStorage.removeItem('latidos_server_url');
+      }
+    }
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    this.connect(this.currentPin, this.currentUser);
+  }
+
+  public getServerUrl(): string {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('latidos_server_url') || '';
+    }
+    return '';
   }
 
   public emitBandHeartbeat(payload: HeartbeatPayload): void {
