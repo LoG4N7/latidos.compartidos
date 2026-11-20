@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-bg-deep: #090308;
+    --color-bg-card: rgba(22, 10, 24, 0.75);
+    --color-crimson: #e11d48;
+    --color-rose: #fb7185;
+    --color-wine: #4c0519;
+    --color-moon: #c084fc;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    box-sizing: border-box;
+  }
+
+  input, textarea {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    background-color: #090308;
+    color: #fce7f3;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Support for mobile notched displays (iPhone Dynamic Island / Notch) */
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
+/* Heartbeat pulse glow keyframes */
+@keyframes romanticGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 15px rgba(225, 29, 72, 0.35));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 35px rgba(244, 63, 94, 0.75));
+    transform: scale(1.05);
+  }
+}
+
+.animate-romantic-glow {
+  animation: romanticGlow 3s ease-in-out infinite;
+}
+
+/* Glassmorphism romantic panel */
+.glass-panel {
+  background: rgba(26, 10, 25, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(244, 63, 94, 0.18);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+.glass-panel-active {
+  background: rgba(50, 15, 40, 0.8);
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  box-shadow: 0 0 25px rgba(225, 29, 72, 0.25);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 6, 17, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(225, 29, 72, 0.3);
+  border-radius: 4px;
+}

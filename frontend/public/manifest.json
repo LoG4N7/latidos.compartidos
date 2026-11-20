@@ -1,0 +1,25 @@
+{
+  "name": "Latidos Compartidos - Demian & Verónica",
+  "short_name": "Latidos",
+  "description": "Aplicación íntima de sincronización biométrica de latidos en tiempo real para Demian & Verónica",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090308",
+  "theme_color": "#090308",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "latidos-compartidos-monorepo",
+  "version": "1.0.0",
+  "description": "Aplicación web móvil progresiva (PWA) de latidos compartidos para Demian y Verónica",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start": "node backend/dist/server.js",
+    "tunnel": "npx localtunnel --port 3001",
+    "android:sync": "npm run build:frontend && cd frontend && npx cap sync android",
+    "android:open": "cd frontend && npx cap open android"
+  },
+  "keywords": [
+    "pwa",
+    "heartbeat",
+    "pulsoid",
+    "ppg",
+    "webrtc",
+    "websockets",
+    "xiaomi-band-9",
+    "couple"
+  ],
+  "author": "Demian & Verónica"
+}
