@@ -271,6 +271,19 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
 
   return (
     <div className="w-full max-w-md mx-auto space-y-4 select-none pb-20">
+      {/* Intimate Module Description */}
+      <div className="glass-panel rounded-2xl px-4 py-3 border border-purple-900/40 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white flex items-center space-x-1.5">
+            <span>Latidos en Pareja</span>
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+          </h2>
+          <p className="text-[11px] text-purple-200/70">
+            Un momento íntimo juntos para sincronizar y sentir sus corazones en tiempo real
+          </p>
+        </div>
+      </div>
+
       {/* Intimate Session Header Status */}
       <div className="glass-panel rounded-2xl p-3.5 border border-rose-900/40 flex items-center justify-between text-xs">
         <div className="flex items-center space-x-2">

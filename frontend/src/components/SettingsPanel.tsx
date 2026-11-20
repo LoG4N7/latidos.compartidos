@@ -198,9 +198,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <div className="flex items-center space-x-2.5">
           <Watch className="w-5 h-5 text-rose-400" />
           <div>
-            <div className="font-semibold text-rose-100">Xiaomi Smart Band 9 & Pulsoid</div>
+            <div className="font-semibold text-rose-100">Latidos de Demian • Fuentes</div>
             <div className="text-[10px] text-rose-300/60">
-              Configurar token, feed o modo simulación
+              Sincronización por notificación, webhook o token
             </div>
           </div>
         </div>

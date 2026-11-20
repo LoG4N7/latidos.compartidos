@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Watch, Radio, HeartHandshake, HelpCircle, Check, Sparkles, ExternalLink, Sliders } from 'lucide-react';
-import { pulsoidService } from '../services/pulsoidService';
+import { X, Watch, Bell, Key, HeartHandshake, HelpCircle, Check, Sparkles, ExternalLink, Sliders } from 'lucide-react';
+import { pulsoidService, HeartSourceMode } from '../services/pulsoidService';
 import { hapticsAudio } from '../utils/hapticsAudio';
 
 interface PulsoidConfigModalProps {
@@ -15,8 +15,8 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
   onSaved
 }) => {
   const [token, setToken] = useState<string>(pulsoidService.getToken());
-  const [mode, setMode] = useState<'live' | 'simulation'>(pulsoidService.getMode());
-  const [simBpm, setSimBpm] = useState<number>(75);
+  const [mode, setMode] = useState<HeartSourceMode>(pulsoidService.getSourceMode());
+  const [baseBpm, setBaseBpm] = useState<number>(pulsoidService.getBaseBpm());
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
@@ -24,10 +24,8 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
 
   const handleSave = () => {
     pulsoidService.setToken(token);
-    pulsoidService.setMode(mode);
-    if (mode === 'simulation') {
-      pulsoidService.setManualBaseBpm(simBpm);
-    }
+    pulsoidService.setSourceMode(mode);
+    pulsoidService.setBaseBpm(baseBpm);
     setSavedSuccess(true);
     hapticsAudio.vibrateSingleBeat(50);
     setTimeout(() => {
@@ -38,8 +36,8 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
   };
 
   const handlePreset = (bpm: number) => {
-    setSimBpm(bpm);
-    pulsoidService.setManualBaseBpm(bpm);
+    setBaseBpm(bpm);
+    pulsoidService.setBaseBpm(bpm);
     hapticsAudio.vibrateSingleBeat(40);
   };
 
@@ -54,10 +52,10 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-rose-100">
-                Xiaomi Smart Band 9 & Pulsoid
+                Latidos de Demian • Fuentes
               </h3>
               <p className="text-xs text-rose-300/70">
-                Transmisión continua de ritmo cardíaco
+                Configura cómo se transmite tu pulso a Verónica
               </p>
             </div>
           </div>
@@ -71,91 +69,62 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
 
         {/* Content */}
         <div className="mt-4 space-y-4 text-sm">
-          {/* Mode Switcher */}
-          <div className="grid grid-cols-2 gap-2 bg-black/50 p-1.5 rounded-xl border border-rose-900/30">
+          {/* 3 Source Modes Switcher */}
+          <div className="grid grid-cols-3 gap-1.5 bg-black/60 p-1.5 rounded-xl border border-rose-900/40">
             <button
-              onClick={() => setMode('live')}
-              className={`py-2 px-3 rounded-lg flex items-center justify-center space-x-1.5 font-medium text-xs transition ${
-                mode === 'live'
+              onClick={() => setMode('notification')}
+              className={`py-2 px-1 rounded-lg flex flex-col items-center justify-center text-center font-medium text-[11px] transition ${
+                mode === 'notification'
                   ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-md'
                   : 'text-rose-300/70 hover:text-white'
               }`}
             >
-              <Radio className="w-3.5 h-3.5" />
-              <span>En Vivo (Mi Band 9)</span>
+              <Bell className="w-4 h-4 mb-0.5" />
+              <span>Notificación (Gratis)</span>
             </button>
+
+            <button
+              onClick={() => setMode('token')}
+              className={`py-2 px-1 rounded-lg flex flex-col items-center justify-center text-center font-medium text-[11px] transition ${
+                mode === 'token'
+                  ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-md'
+                  : 'text-rose-300/70 hover:text-white'
+              }`}
+            >
+              <Key className="w-4 h-4 mb-0.5" />
+              <span>Token (De Pago)</span>
+            </button>
+
             <button
               onClick={() => setMode('simulation')}
-              className={`py-2 px-3 rounded-lg flex items-center justify-center space-x-1.5 font-medium text-xs transition ${
+              className={`py-2 px-1 rounded-lg flex flex-col items-center justify-center text-center font-medium text-[11px] transition ${
                 mode === 'simulation'
                   ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-md'
                   : 'text-rose-300/70 hover:text-white'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Modo Simulación</span>
+              <Sparkles className="w-4 h-4 mb-0.5" />
+              <span>Simulación</span>
             </button>
           </div>
 
-          {/* Live Pulsoid Configuration */}
-          {mode === 'live' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-rose-200 mb-1">
-                  Pulsoid Token / Feed Key
-                </label>
-                <input
-                  type="text"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="Ej: f47ac10b-58cc-4372-a567-0e02b2c3d479"
-                  className="w-full bg-black/60 border border-rose-800/50 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-rose-900/60 focus:outline-none focus:border-rose-400"
-                />
-                <p className="mt-1 text-[11px] text-rose-300/60">
-                  Obtén tu token personal en <a href="https://pulsoid.net" target="_blank" rel="noreferrer" className="text-rose-400 underline inline-flex items-center gap-0.5">pulsoid.net <ExternalLink className="w-2.5 h-2.5" /></a>
-                </p>
-              </div>
-
-              {/* Instructions toggle */}
-              <button
-                type="button"
-                onClick={() => setShowInstructions(!showInstructions)}
-                className="w-full py-2 px-3 rounded-xl bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/30 flex items-center justify-between text-xs text-rose-300 transition"
-              >
-                <span className="flex items-center space-x-1.5">
-                  <HelpCircle className="w-4 h-4 text-rose-400" />
-                  <span>¿Cómo conectar Xiaomi Smart Band 9?</span>
-                </span>
-                <span className="text-rose-400 font-mono text-[10px]">
-                  {showInstructions ? 'Ocultar' : 'Ver Guía'}
-                </span>
-              </button>
-
-              {showInstructions && (
-                <div className="p-3 bg-black/70 rounded-xl border border-rose-900/40 text-xs space-y-2 text-rose-200/90 leading-relaxed">
-                  <div className="font-semibold text-rose-300">Paso a Paso Rápido:</div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-rose-200/80">
-                    <li>Descarga en tu teléfono la app <strong>Notify for Xiaomi</strong> o <strong>Mi Fitness</strong> con sincronización de frecuencia cardíaca continua.</li>
-                    <li>Crea una cuenta gratuita en <strong>Pulsoid.net</strong> e instala su app en tu smartphone.</li>
-                    <li>En Pulsoid, tu pulsera Xiaomi Band 9 aparecerá como monitor de ritmo cardíaco por Bluetooth BLE.</li>
-                    <li>En la web de Pulsoid, ve a <em>Integrations & Widgets</em> o <em>API Token</em>, copia tu <strong>Access Token</strong> y pégalo arriba.</li>
-                    <li>¡Listo! Tu ritmo cardíaco se transmitirá continuamente a Verónica en tiempo real.</li>
-                  </ol>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Simulation Mode Configuration */}
-          {mode === 'simulation' && (
+          {/* Mode 1: Base Free Notification Sync */}
+          {mode === 'notification' && (
             <div className="space-y-3 bg-black/40 p-3.5 rounded-xl border border-rose-900/30">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-rose-200 flex items-center space-x-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Ritmo Cardíaco Simulado:</span>
+              <div className="flex items-center space-x-2 text-rose-200 font-bold text-xs">
+                <Bell className="w-4 h-4 text-rose-400" />
+                <span>Opción Base Gratuita (Notificación de Pulsoid):</span>
+              </div>
+              <p className="text-xs text-rose-300/80 leading-relaxed">
+                Dado que la app de Pulsoid en tu teléfono muestra tu ritmo cardíaco en vivo en la barra de notificaciones, puedes calibrar aquí tus pulsaciones basales para transmitírselas a Verónica sin pagar ninguna suscripción:
+              </p>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs font-semibold text-rose-200">
+                  Ritmo cardíaco actual:
                 </span>
-                <span className="text-sm font-bold text-rose-400 font-mono">
-                  {simBpm} BPM
+                <span className="text-base font-black text-rose-400 font-mono">
+                  {baseBpm} BPM
                 </span>
               </div>
 
@@ -163,11 +132,11 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
                 type="range"
                 min="50"
                 max="160"
-                value={simBpm}
+                value={baseBpm}
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  setSimBpm(val);
-                  pulsoidService.setManualBaseBpm(val);
+                  setBaseBpm(val);
+                  pulsoidService.setBaseBpm(val);
                 }}
                 className="w-full accent-rose-500 cursor-pointer"
               />
@@ -182,29 +151,93 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePreset(78)}
+                  onClick={() => handlePreset(76)}
                   className="py-1.5 px-2 bg-rose-950/40 hover:bg-rose-900/50 rounded-lg text-[11px] text-rose-300 border border-rose-900/30 transition text-left"
                 >
-                  ✨ Tranquilo (78 BPM)
+                  ✨ Tranquilo (76 BPM)
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePreset(98)}
+                  onClick={() => handlePreset(94)}
                   className="py-1.5 px-2 bg-rose-950/40 hover:bg-rose-900/50 rounded-lg text-[11px] text-rose-300 border border-rose-900/30 transition text-left"
                 >
-                  🥰 Enamorado (98 BPM)
+                  🥰 Pensando en Ella (94 BPM)
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePreset(125)}
+                  onClick={() => handlePreset(115)}
                   className="py-1.5 px-2 bg-rose-950/40 hover:bg-rose-900/50 rounded-lg text-[11px] text-rose-300 border border-rose-900/30 transition text-left"
                 >
-                  💓 Emocionado (125 BPM)
+                  💓 Emocionado (115 BPM)
                 </button>
               </div>
 
+              <div className="p-2.5 bg-black/60 rounded-xl border border-rose-900/40 text-[11px] text-rose-300/70 leading-snug">
+                💡 <strong>Webhook Gratuito Automático:</strong> Si usas la app <em>Notify for Xiaomi</em>, puedes activar en sus ajustes el envío de Webhook HTTP a:
+                <div className="font-mono text-white text-[10px] mt-1 bg-black/80 p-1.5 rounded border border-rose-900/50 break-all select-all">
+                  http://tu-servidor:3001/api/pulsoid/webhook
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mode 2: Paid Token Option */}
+          {mode === 'token' && (
+            <div className="space-y-3 bg-black/40 p-3.5 rounded-xl border border-purple-900/40">
+              <div className="flex items-center space-x-2 text-purple-200 font-bold text-xs">
+                <Key className="w-4 h-4 text-purple-400" />
+                <span>Opción de Pago (Pulsoid Token / Feed):</span>
+              </div>
+              <p className="text-xs text-purple-200/80 leading-relaxed">
+                Si cuentas con el plan de suscripción de Pulsoid o un Token de Desarrollador, pégalo aquí para recibir datos continuos directamente por WebSocket desde los servidores de Pulsoid:
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-purple-200 mb-1">
+                  Pulsoid Access Token / Widget Key:
+                </label>
+                <input
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Ej: f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                  className="w-full bg-black/70 border border-purple-800/50 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-purple-900/60 focus:outline-none focus:border-purple-400"
+                />
+                <p className="mt-1 text-[11px] text-purple-300/60">
+                  Disponible en <a href="https://pulsoid.net" target="_blank" rel="noreferrer" className="text-purple-400 underline inline-flex items-center gap-0.5">pulsoid.net <ExternalLink className="w-2.5 h-2.5" /></a>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Mode 3: Simulation */}
+          {mode === 'simulation' && (
+            <div className="space-y-3 bg-black/40 p-3.5 rounded-xl border border-rose-900/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-rose-200 flex items-center space-x-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Ritmo Cardíaco Simulado:</span>
+                </span>
+                <span className="text-sm font-bold text-rose-400 font-mono">
+                  {baseBpm} BPM
+                </span>
+              </div>
+
+              <input
+                type="range"
+                min="50"
+                max="160"
+                value={baseBpm}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setBaseBpm(val);
+                  pulsoidService.setBaseBpm(val);
+                }}
+                className="w-full accent-rose-500 cursor-pointer"
+              />
+
               <p className="text-[11px] text-rose-300/60 leading-tight">
-                * El modo simulación incluye arritmia sinusal respiratoria fisiológica realista (variación sutil automática según el ciclo de respiración).
+                * El modo simulación incluye arritmia sinusal respiratoria fisiológica (variación automática y suave según el ciclo de respiración).
               </p>
             </div>
           )}

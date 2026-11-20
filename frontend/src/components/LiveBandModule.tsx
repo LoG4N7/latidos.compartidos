@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CloudSun, Flame, Heart, Smartphone, SlidersHorizontal } from 'lucide-react';
+import { CloudSun, Flame, Heart, SlidersHorizontal, Bell, Radio, Check, Sparkles, Send, Activity } from 'lucide-react';
 import type { UserProfile, HeartbeatPayload, WeatherData } from '../types';
 import { OrganicHeart } from './OrganicHeart';
 import { pulsoidService, type PulsoidData } from '../services/pulsoidService';
@@ -18,16 +18,17 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
   partnerUser,
   onOpenPulsoidConfig
 }) => {
-  // View mode: 'partner' (feeling partner's heart) vs 'mine' (monitoring my transmission)
-  const [viewTarget, setViewTarget] = useState<'partner' | 'mine'>('partner');
+  const isDemian = currentUser === 'Demian';
 
-  // Local user's heart rate state
-  const [myBpm, setMyBpm] = useState<number>(74);
-  const [mySourceStatus, setMySourceStatus] = useState<string>('Simulación Inteligente (En Reposo)');
+  // Demian's heart rate state (transmitted to Veronica)
+  const [demianBpm, setDemianBpm] = useState<number>(() => pulsoidService.getBaseBpm() || 74);
+  const [demianSourceStatus, setDemianSourceStatus] = useState<string>('En vivo desde Notificación Pulsoid (Mi Band 9)');
 
-  // Partner's incoming heart rate state
-  const [partnerBpm, setPartnerBpm] = useState<number>(76);
-  const [partnerSource, setPartnerSource] = useState<string>('Último latido / En reposo');
+  // Quick sync input for Demian
+  const [manualSyncBpm, setManualSyncBpm] = useState<number>(demianBpm);
+  const [syncFeedback, setSyncFeedback] = useState<boolean>(false);
+
+  // Partner status
   const [isPartnerConnected, setIsPartnerConnected] = useState<boolean>(false);
 
   // Simulated body temperature
@@ -52,159 +53,153 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
 
   // Track interval for temperature engine updates
   useEffect(() => {
-    // 1. Initial weather fetch
     temperatureEngine.fetchAmbientWeather().then((w) => setWeatherInfo(w));
 
-    // 2. Periodic physiological temperature update (every 15 seconds)
     const tempInterval = setInterval(() => {
-      const activeBpm = viewTarget === 'partner' ? partnerBpm : myBpm;
-      const updated = temperatureEngine.calculateBodyTemperature(activeBpm);
+      const updated = temperatureEngine.calculateBodyTemperature(demianBpm);
       setSkinTemp(updated);
     }, 15000);
 
-    // Initial calculation
-    setSkinTemp(temperatureEngine.calculateBodyTemperature(viewTarget === 'partner' ? partnerBpm : myBpm));
+    setSkinTemp(temperatureEngine.calculateBodyTemperature(demianBpm));
 
     return () => clearInterval(tempInterval);
-  }, [viewTarget, partnerBpm, myBpm]);
+  }, [demianBpm]);
 
-  // Subscribe to local Pulsoid stream / simulation
+  // If user is Demian: subscribe to local Pulsoid/Notification stream and broadcast to Veronica
   useEffect(() => {
-    const unsubscribePulsoid = pulsoidService.subscribe((data: PulsoidData) => {
-      setMyBpm(data.heartRate);
-      setMySourceStatus(data.statusText);
+    if (isDemian) {
+      const unsubscribePulsoid = pulsoidService.subscribe((data: PulsoidData) => {
+        setDemianBpm(data.heartRate);
+        setDemianSourceStatus(data.statusText);
 
-      // Broadcast to partner over WebSocket
-      socketService.emitBandHeartbeat({
-        userId: currentUser,
-        bpm: data.heartRate,
-        source: data.source,
-        timestamp: data.timestamp,
-        temperature: skinTemp.celsius
+        // Broadcast Demian's heart to Veronica via WebSockets
+        socketService.emitBandHeartbeat({
+          userId: 'Demian',
+          bpm: data.heartRate,
+          source: data.source,
+          timestamp: data.timestamp,
+          temperature: skinTemp.celsius
+        });
       });
-    });
 
-    return () => unsubscribePulsoid();
-  }, [currentUser, skinTemp.celsius]);
+      return () => unsubscribePulsoid();
+    }
+  }, [isDemian, skinTemp.celsius]);
 
-  // Subscribe to partner's incoming heartbeat via WebSocket
+  // If user is Veronica: listen to incoming heartbeats from Demian
   useEffect(() => {
-    const unsubPartner = socketService.onBandHeartbeat((payload: HeartbeatPayload) => {
-      if (payload.userId === partnerUser) {
-        setPartnerBpm(payload.bpm);
-        setPartnerSource(payload.source === 'pulsoid' ? 'En vivo desde Mi Band 9' : 'Último latido / En reposo');
-        setIsPartnerConnected(true);
-      }
-    });
+    if (!isDemian) {
+      const unsubPartner = socketService.onBandHeartbeat((payload: HeartbeatPayload) => {
+        if (payload.userId === 'Demian') {
+          setDemianBpm(payload.bpm);
+          if (payload.temperature) {
+            setSkinTemp((prev) => ({
+              ...prev,
+              celsius: payload.temperature!,
+              formatted: `${payload.temperature!.toFixed(1)}°C`
+            }));
+          }
+          setDemianSourceStatus(
+            payload.source === 'pulsoid'
+              ? 'En vivo desde Pulsoid Token (Mi Band 9)'
+              : payload.source === 'notification'
+              ? 'En vivo desde Notificación Pulsoid (Mi Band 9)'
+              : 'Último latido de Demian / En reposo'
+          );
+          setIsPartnerConnected(true);
+        }
+      });
 
-    return () => unsubPartner();
-  }, [partnerUser]);
+      return () => unsubPartner();
+    }
+  }, [isDemian]);
 
-  // Trigger double haptic pulse ("lub-dub") whenever partner's heart beats
-  const handlePartnerBeatTrigger = () => {
-    if (viewTarget === 'partner') {
+  // When heart beats:
+  // If Veronica is viewing, HER phone vibrates double ("lub-dub")
+  const handleBeatTrigger = () => {
+    if (!isDemian) {
       hapticsAudio.vibrateLubDub();
     }
   };
 
-  const handleMyBeatTrigger = () => {
-    if (viewTarget === 'mine') {
-      hapticsAudio.vibrateLubDub();
-    }
+  const handleApplyBpm = (bpmToApply: number) => {
+    const safe = Math.max(50, Math.min(180, Math.round(bpmToApply)));
+    setManualSyncBpm(safe);
+    setDemianBpm(safe);
+    pulsoidService.setBaseBpm(safe);
+    hapticsAudio.vibrateSingleBeat(40);
+    setSyncFeedback(true);
+    setTimeout(() => setSyncFeedback(false), 1200);
   };
-
-  const displayedBpm = viewTarget === 'partner' ? partnerBpm : myBpm;
-  const displayedUser = viewTarget === 'partner' ? partnerUser : currentUser;
-  const displayedSource = viewTarget === 'partner' ? partnerSource : mySourceStatus;
-  const isTargetPartner = viewTarget === 'partner';
 
   return (
     <div className="w-full max-w-md mx-auto space-y-4 select-none pb-20">
-      {/* Target Selector: Partner's Heart vs My Heart */}
-      <div className="bg-black/50 p-1 rounded-2xl border border-rose-900/30 flex items-center shadow-inner">
-        <button
-          onClick={() => {
-            setViewTarget('partner');
-            hapticsAudio.vibrateSingleBeat(30);
-          }}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
-            isTargetPartner
-              ? 'bg-gradient-to-r from-rose-600 via-rose-700 to-rose-800 text-white shadow-md'
-              : 'text-rose-300/70 hover:text-white'
-          }`}
-        >
-          <Heart className="w-4 h-4 fill-current text-rose-200" />
-          <span>Sintiendo a {partnerUser}</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setViewTarget('mine');
-            hapticsAudio.vibrateSingleBeat(30);
-          }}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
-            !isTargetPartner
-              ? 'bg-gradient-to-r from-purple-600 to-purple-800 text-white shadow-md'
-              : 'text-purple-300/70 hover:text-white'
-          }`}
-        >
-          <Smartphone className="w-4 h-4 text-purple-200" />
-          <span>Mi Transmisión</span>
-        </button>
-      </div>
-
-      {/* Main Organic Beating Heart */}
-      <div className="glass-panel rounded-3xl p-4 border border-rose-900/30 relative overflow-hidden">
-        <div className="flex items-center justify-between mb-1 px-2">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-            <span className="text-xs font-semibold text-rose-200 uppercase tracking-wider">
-              {isTargetPartner ? `Ritmo Cardíaco de ${partnerUser}` : 'Tu Ritmo Transmitido'}
-            </span>
+      {/* Intimate Section Header */}
+      <div className="glass-panel rounded-2xl px-4 py-3 border border-rose-900/40 flex items-center justify-between">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-600 to-rose-400 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-rose-950/60">
+            D
           </div>
-
-          <button
-            onClick={onOpenPulsoidConfig}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-rose-950/40 hover:bg-rose-900/50 text-[11px] text-rose-300 border border-rose-800/40 transition active:scale-95"
-          >
-            <SlidersHorizontal className="w-3 h-3" />
-            <span>Ajustar Banda</span>
-          </button>
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center space-x-1.5">
+              <span>{isDemian ? 'Tus Latidos para Verónica' : 'El Corazón de Demian'}</span>
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            </h2>
+            <p className="text-[11px] text-rose-300/70">
+              {isDemian
+                ? 'Transmitiendo tu pulso cardíaco en vivo a su celular'
+                : 'Sintiendo los latidos reales de Demian en tu mano'}
+            </p>
+          </div>
         </div>
 
+        {isDemian && (
+          <button
+            onClick={onOpenPulsoidConfig}
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/50 text-[11px] text-rose-300 border border-rose-800/40 transition active:scale-95"
+            title="Opciones de Pulsoid y Token de Pago"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-rose-400" />
+            <span>Ajustes</span>
+          </button>
+        )}
+      </div>
+
+      {/* Main Organic Beating Heart of Demian */}
+      <div className="glass-panel-active rounded-3xl p-4 border border-rose-500/30 relative overflow-hidden text-center">
         <OrganicHeart
-          bpm={displayedBpm}
-          userName={displayedUser}
-          isPartner={isTargetPartner}
-          sourceText={displayedSource}
+          bpm={demianBpm}
+          userName="Demian"
+          isPartner={!isDemian}
+          sourceText={demianSourceStatus}
           temperature={skinTemp.formatted}
           subtitle={
-            isTargetPartner
-              ? `Vibración háptica activa: tu teléfono late con el pulso exacto de ${partnerUser}.`
-              : `Transmitiendo continuamente tu pulso a ${partnerUser} vía WebSockets.`
+            isDemian
+              ? 'Tu Xiaomi Band 9 transmite cada latido directamente al celular de Verónica.'
+              : 'Tu teléfono vibra en sincronía con cada latido que llega desde el pecho de Demian.'
           }
-          onBeatTrigger={isTargetPartner ? handlePartnerBeatTrigger : handleMyBeatTrigger}
-          accentColor={isTargetPartner ? 'crimson' : 'violet'}
+          onBeatTrigger={handleBeatTrigger}
+          accentColor="crimson"
         />
       </div>
 
-      {/* Temperature & Physiological Biometrics Card */}
+      {/* Temperature & Environmental Biometrics Card */}
       <div className="glass-panel rounded-2xl p-4 border border-rose-900/30 grid grid-cols-2 gap-3 text-xs">
-        {/* Skin Temperature Estimation */}
+        {/* Demian's Skin Temperature */}
         <div className="bg-black/40 p-3 rounded-xl border border-rose-900/20">
           <div className="flex items-center space-x-1.5 text-rose-400 font-semibold mb-1">
             <Flame className="w-4 h-4 text-rose-500" />
-            <span>Temp. Cutánea</span>
+            <span>{isDemian ? 'Tu Temp. Cutánea' : 'Piel de Demian'}</span>
           </div>
           <div className="text-2xl font-black text-white font-mono">
             {skinTemp.formatted}
           </div>
           <p className="text-[10px] text-rose-300/60 mt-1 leading-tight">
             {skinTemp.state === 'warm'
-              ? 'Tibia / Emocionada (>95 BPM)'
+              ? 'Tibia / Emocionado (>95 BPM)'
               : skinTemp.state === 'cool'
-              ? 'Fresca / Relajada en reposo'
-              : 'Temperatura fisiológica óptima'}
+              ? 'Fresca / En reposo tranquilo'
+              : 'Temperatura fisiológica cálida'}
           </p>
         </div>
 
@@ -223,6 +218,98 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
         </div>
       </div>
 
+      {/* Demian's Quick Synchronization Panel (Only visible to Demian) */}
+      {isDemian && (
+        <div className="glass-panel rounded-2xl p-4 border border-rose-900/40 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-rose-200 font-bold">
+              <Bell className="w-4 h-4 text-rose-400" />
+              <span>Sincronizar con Notificación de Pulsoid:</span>
+            </div>
+            <span className="text-xs font-mono font-bold text-rose-400">
+              {manualSyncBpm} BPM
+            </span>
+          </div>
+
+          <p className="text-[11px] text-rose-300/70 leading-relaxed">
+            Como la app de Pulsoid muestra tus BPM en la barra de notificaciones de tu teléfono, puedes ajustar o calibrar tu pulso base aquí con 1 toque (100% gratuito sin pagar el token):
+          </p>
+
+          {/* Stepper Buttons and Slider */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleApplyBpm(manualSyncBpm - 5)}
+              className="py-1.5 px-2.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/40 text-rose-300 font-bold active:scale-95"
+            >
+              -5
+            </button>
+            <button
+              onClick={() => handleApplyBpm(manualSyncBpm - 1)}
+              className="py-1.5 px-2.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/40 text-rose-300 font-bold active:scale-95"
+            >
+              -1
+            </button>
+            
+            <input
+              type="range"
+              min="50"
+              max="160"
+              value={manualSyncBpm}
+              onChange={(e) => handleApplyBpm(Number(e.target.value))}
+              className="flex-1 accent-rose-500 cursor-pointer"
+            />
+
+            <button
+              onClick={() => handleApplyBpm(manualSyncBpm + 1)}
+              className="py-1.5 px-2.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/40 text-rose-300 font-bold active:scale-95"
+            >
+              +1
+            </button>
+            <button
+              onClick={() => handleApplyBpm(manualSyncBpm + 5)}
+              className="py-1.5 px-2.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/40 text-rose-300 font-bold active:scale-95"
+            >
+              +5
+            </button>
+          </div>
+
+          {/* Quick Preset Buttons */}
+          <div className="grid grid-cols-2 gap-1.5 pt-1">
+            <button
+              onClick={() => handleApplyBpm(66)}
+              className="py-1.5 px-2 bg-black/50 hover:bg-rose-950/60 rounded-xl text-[11px] text-rose-300/80 border border-rose-900/30 text-left transition"
+            >
+              😴 En Reposo (66 BPM)
+            </button>
+            <button
+              onClick={() => handleApplyBpm(78)}
+              className="py-1.5 px-2 bg-black/50 hover:bg-rose-950/60 rounded-xl text-[11px] text-rose-300/80 border border-rose-900/30 text-left transition"
+            >
+              ✨ Tranquilo (78 BPM)
+            </button>
+            <button
+              onClick={() => handleApplyBpm(96)}
+              className="py-1.5 px-2 bg-black/50 hover:bg-rose-950/60 rounded-xl text-[11px] text-rose-300/80 border border-rose-900/30 text-left transition"
+            >
+              🥰 Pensando en Verónica (96 BPM)
+            </button>
+            <button
+              onClick={() => handleApplyBpm(118)}
+              className="py-1.5 px-2 bg-black/50 hover:bg-rose-950/60 rounded-xl text-[11px] text-rose-300/80 border border-rose-900/30 text-left transition"
+            >
+              💓 Emocionado / Cardio (118 BPM)
+            </button>
+          </div>
+
+          {syncFeedback && (
+            <div className="p-2 bg-rose-900/40 border border-rose-500/50 rounded-xl text-center text-rose-200 text-xs font-semibold flex items-center justify-center space-x-1.5">
+              <Check className="w-3.5 h-3.5 text-rose-300" />
+              <span>¡Pulso sincronizado y transmitido a Verónica!</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Partner Connection Banner */}
       <div className="glass-panel rounded-xl px-3.5 py-2.5 border border-rose-900/30 flex items-center justify-between text-xs">
         <div className="flex items-center space-x-2">
@@ -234,13 +321,13 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
             }`}
           />
           <span className="text-rose-200">
-            {isPartnerConnected
-              ? `${partnerUser} está en línea sincronizado`
-              : `Esperando a ${partnerUser}...`}
+            {isDemian
+              ? (isPartnerConnected ? 'Verónica está en línea sintiendo tus latidos ✨' : 'Esperando a que Verónica abra la app...')
+              : (isPartnerConnected ? 'Conectada con el corazón de Demian en vivo' : 'Esperando señal de Demian...')}
           </span>
         </div>
         <span className="text-[10px] font-mono text-rose-400/80">
-          {displayedBpm} BPM
+          {demianBpm} BPM
         </span>
       </div>
     </div>

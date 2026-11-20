@@ -3,7 +3,7 @@ export type UserProfile = 'Demian' | 'Verónica';
 export interface HeartbeatPayload {
   userId: UserProfile;
   bpm: number;
-  source: 'pulsoid' | 'simulation' | 'ppg';
+  source: 'notification' | 'pulsoid' | 'simulation' | 'ppg';
   temperature?: number;
   timestamp: number;
   rrInterval?: number;
