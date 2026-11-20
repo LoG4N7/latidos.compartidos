@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: latidos-compartidos
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: CLIENT_URL
+        value: '*'
