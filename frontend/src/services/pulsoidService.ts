@@ -141,12 +141,12 @@ export class PulsoidService {
 
       this.ws.onerror = () => {
         console.warn('[Pulsoid Token] Error de conexión, usando notificación de respaldo');
-        this.startBiologicalLoop('Pulsoid Token Desconectado (Notificación activa)');
+        this.startBiologicalLoop('Token no válido (Usando Notificación Gratuita)');
       };
 
       this.ws.onclose = () => {
         if (this.sourceMode === 'token') {
-          this.startBiologicalLoop('Buscando conexión con Pulsoid...');
+          this.startBiologicalLoop('Token desconectado (Usando Notificación Gratuita)');
         }
       };
     } catch (e) {

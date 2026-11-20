@@ -203,8 +203,8 @@ export const PulsoidConfigModal: React.FC<PulsoidConfigModalProps> = ({
                   placeholder="Ej: f47ac10b-58cc-4372-a567-0e02b2c3d479"
                   className="w-full bg-black/70 border border-purple-800/50 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-purple-900/60 focus:outline-none focus:border-purple-400"
                 />
-                <p className="mt-1 text-[11px] text-purple-300/60">
-                  Disponible en <a href="https://pulsoid.net" target="_blank" rel="noreferrer" className="text-purple-400 underline inline-flex items-center gap-0.5">pulsoid.net <ExternalLink className="w-2.5 h-2.5" /></a>
+                <p className="mt-1 text-[11px] text-amber-300/80 leading-snug">
+                  ⚠️ <strong>Aviso:</strong> El enlace de widget (<em>pulsoid.net/widget/view/...</em>) es para OBS y no funciona como Token. Los Tokens son claves exclusivas del plan de pago (BRO) de Pulsoid. Si no tienes suscripción de pago, selecciona arriba la opción <strong>🔔 Notificación (Gratis)</strong>.
                 </p>
               </div>
             </div>
