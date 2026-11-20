@@ -1,8 +1,11 @@
+import { setHardwareTorch } from './nativeTorch';
+
 /**
  * High-Performance Optical Photoplethysmography (PPG) Engine
  * Processes camera video frames at 30 FPS to detect arterial capillary pulse waves
  * Filters: High-pass (0.7 Hz / 42 BPM) + Low-pass (3.5 Hz / 210 BPM)
  * Detects systolic cardiac peaks with adaptive dynamic thresholding and refractory periods
+ * Compatible with Samsung Galaxy (One UI 6 / Android 14) and multi-camera devices
  */
 
 export interface PPGOptions {
@@ -10,6 +13,7 @@ export interface PPGOptions {
   onWaveSample: (normalizedValue: number, isFingerDetected: boolean) => void;
   onFingerStatusChange: (isDetected: boolean) => void;
   onError: (error: string) => void;
+  onLightLevel?: (brightness: number, redRatio: number) => void;
 }
 
 export class PPGEngine {
@@ -19,9 +23,12 @@ export class PPGEngine {
   private mediaStream: MediaStream | null = null;
   private videoTrack: MediaStreamTrack | null = null;
   private animationFrameId: number | null = null;
+  private torchRetryTimer: any = null;
 
   private isRunning: boolean = false;
   private isFingerPresent: boolean = false;
+  private isTorchOn: boolean = false;
+  private currentDeviceId: string | null = null;
   private callbacks: PPGOptions;
 
   // Signal Processing State
@@ -34,7 +41,6 @@ export class PPGEngine {
   private currentBpm: number = 72;
 
   // Dynamic Peak Detection State
-  private peakThreshold: number = 0.5;
   private maxSignalRecent: number = 0.5;
   private minSignalRecent: number = -0.5;
 
@@ -43,10 +49,25 @@ export class PPGEngine {
   }
 
   /**
+   * Returns list of video input devices
+   */
+  public async getAvailableCameras(): Promise<MediaDeviceInfo[]> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((d) => d.kind === 'videoinput');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
    * Initializes camera, enables torch/flashlight, and starts PPG analysis loop
    */
-  public async start(): Promise<boolean> {
-    if (this.isRunning) return true;
+  public async start(deviceId?: string): Promise<boolean> {
+    if (this.isRunning && !deviceId) return true;
+    if (this.isRunning && deviceId) {
+      this.stop();
+    }
 
     try {
       // 1. Create hidden video and sampling canvas
@@ -65,32 +86,73 @@ export class PPGEngine {
         this.ctx = this.canvasElement.getContext('2d', { willReadFrequently: true });
       }
 
-      // 2. Request rear camera with torch
-      const constraints: MediaStreamConstraints = {
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
+      this.currentDeviceId = deviceId || null;
+
+      // 2. Request rear camera constraints
+      let videoConstraints: MediaTrackConstraints;
+      if (deviceId) {
+        videoConstraints = {
+          deviceId: { exact: deviceId },
           width: { ideal: 320 },
           height: { ideal: 240 }
-        }
-      };
+        };
+      } else {
+        // Find best rear camera (prefer main lens over ultra-wide/macro on Samsung)
+        const allCameras = await this.getAvailableCameras();
+        const backCameras = allCameras.filter(c => {
+          const label = c.label.toLowerCase();
+          return !label.includes('front') && !label.includes('selfie') && !label.includes('delantera');
+        });
 
-      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        // Choose camera with 'back 0', 'main', or first back camera
+        let preferredCamera = backCameras.find(c => {
+          const l = c.label.toLowerCase();
+          return l.includes('0') || l.includes('main') || l.includes('principal');
+        }) || backCameras[0];
+
+        if (preferredCamera && preferredCamera.deviceId) {
+          videoConstraints = {
+            deviceId: { exact: preferredCamera.deviceId },
+            width: { ideal: 320 },
+            height: { ideal: 240 }
+          };
+          this.currentDeviceId = preferredCamera.deviceId;
+        } else {
+          videoConstraints = {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 320 },
+            height: { ideal: 240 }
+          };
+        }
+      }
+
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: videoConstraints
+      });
+
       this.videoTrack = this.mediaStream.getVideoTracks()[0] || null;
 
       if (!this.videoTrack) {
         throw new Error('No se encontró ninguna cámara disponible');
       }
 
-      // 3. Attempt to turn on Flashlight/Torch
-      await this.applyTorch(true);
-
+      // Attach stream to hidden video
       this.videoElement.srcObject = this.mediaStream;
       await this.videoElement.play();
 
       this.isRunning = true;
       this.lastPeakTime = Date.now();
       this.recentRRIntervals = [];
+
+      // 3. Hardware Torch activation (Native Android + WebRTC)
+      // Samsung One UI 6 requires applying torch after video starts streaming
+      await this.applyTorch(true);
+      this.torchRetryTimer = setTimeout(() => {
+        if (this.isRunning) {
+          this.applyTorch(true);
+        }
+      }, 350);
 
       // 4. Start 30 FPS processing loop
       this.processLoop();
@@ -105,23 +167,29 @@ export class PPGEngine {
   }
 
   /**
-   * Toggles or applies Torch constraint
+   * Toggles or applies Torch constraint (Hardware level on Android + WebRTC)
    */
   public async applyTorch(on: boolean): Promise<boolean> {
-    if (!this.videoTrack) return false;
-
+    this.isTorchOn = on;
     try {
-      const capabilities = (this.videoTrack as any).getCapabilities?.() || {};
-      if (capabilities.torch) {
-        await (this.videoTrack as any).applyConstraints({
-          advanced: [{ torch: on }]
-        });
-        return true;
-      }
+      const ok = await setHardwareTorch(on, this.videoTrack);
+      return ok;
     } catch (e) {
-      console.warn('Torch constraint not supported or failed on this device:', e);
+      console.warn('Torch activation note:', e);
+      return false;
     }
-    return false;
+  }
+
+  public toggleTorch(): Promise<boolean> {
+    return this.applyTorch(!this.isTorchOn);
+  }
+
+  public isTorchActive(): boolean {
+    return this.isTorchOn;
+  }
+
+  public getCurrentDeviceId(): string | null {
+    return this.currentDeviceId;
   }
 
   /**
@@ -143,6 +211,7 @@ export class PPGEngine {
 
   /**
    * Optical analysis and mathematical filtering
+   * Optimized for biological capillary red absorption
    */
   private analyzeFrame(pixels: Uint8ClampedArray): void {
     let sumR = 0;
@@ -160,11 +229,17 @@ export class PPGEngine {
     const avgG = sumG / totalPixels;
     const avgB = sumB / totalPixels;
 
+    // Optical Hemoglobin Ratio:
+    // Capillary blood strongly absorbs green/blue light (500-600nm) and reflects/transmits red light (>650nm)
+    const redRatio = avgR / (avgG + avgB + 1);
+    if (this.callbacks.onLightLevel) {
+      this.callbacks.onLightLevel(Math.round(avgR), Math.round(redRatio * 100) / 100);
+    }
+
     // Finger Presence Validation:
-    // When the finger firmly covers the lens and flash:
-    // 1. Red is predominant (avgR > 130)
-    // 2. Red significantly exceeds Green and Blue: avgR / (avgG + avgB + 1) > 1.35
-    const fingerDetected = avgR > 130 && avgR > (avgG + avgB) * 0.95;
+    // 1. Adequate brightness from flash/ambient light: avgR > 35
+    // 2. Clear red dominance: redRatio > 1.15 OR (avgR > 60 and avgR > avgG * 1.2)
+    const fingerDetected = avgR > 35 && (redRatio > 1.15 || (avgR > 60 && avgR > avgG * 1.2));
 
     if (fingerDetected !== this.isFingerPresent) {
       this.isFingerPresent = fingerDetected;
@@ -182,7 +257,7 @@ export class PPGEngine {
 
     const now = Date.now();
 
-    // Raw optical absorption signal (inverted Red channel: more blood = more light absorbed)
+    // Raw optical absorption signal (inverted Red channel: systolic pulse absorbs more light)
     const rawVal = -avgR;
 
     // 1. High-Pass Filter (DC Baseline Subtraction ~0.7 Hz)
@@ -195,7 +270,6 @@ export class PPGEngine {
     const detrended = rawVal - this.baseline;
 
     // 2. Low-Pass Smoothing Filter (~3.5 Hz cutoff)
-    // Exponential smoothing with alpha = 0.35 eliminates sensor flicker
     this.smoothedSignal = this.smoothedSignal * 0.65 + detrended * 0.35;
 
     // Normalize value for waveform display (-1 to 1)
@@ -217,59 +291,71 @@ export class PPGEngine {
       this.sampleTimes.shift();
     }
 
-    // Dynamic threshold: 50% of the recent positive amplitude
-    this.peakThreshold = Math.max(this.maxSignalRecent * 0.45, 0.08);
+    // Dynamic threshold: 50% of recent amplitude
+    const threshold = this.maxSignalRecent * 0.5;
 
-    // Check if the mid-point sample is a local maximum
-    if (this.recentSamples.length >= 5) {
-      const mid = Math.floor(this.recentSamples.length / 2);
-      const midVal = this.recentSamples[mid];
-      const midTime = this.sampleTimes[mid];
+    // Refractory period: human heart cannot beat faster than 220 BPM (272 ms minimum interval)
+    const timeSinceLastPeak = now - this.lastPeakTime;
 
-      const isLocalMax =
-        midVal > this.recentSamples[mid - 1] &&
-        midVal > this.recentSamples[mid + 1] &&
-        midVal > this.peakThreshold;
+    if (this.recentSamples.length >= 5 && timeSinceLastPeak > 280) {
+      const midIdx = Math.floor(this.recentSamples.length / 2);
+      const midVal = this.recentSamples[midIdx];
 
-      // Refractory period: minimum 285ms between beats (~210 BPM max)
-      const timeSinceLastPeak = midTime - this.lastPeakTime;
+      // Local maximum check
+      let isLocalPeak = true;
+      for (let i = 0; i < this.recentSamples.length; i++) {
+        if (i !== midIdx && this.recentSamples[i] >= midVal) {
+          isLocalPeak = false;
+          break;
+        }
+      }
 
-      if (isLocalMax && timeSinceLastPeak >= 285) {
-        this.lastPeakTime = midTime;
+      if (isLocalPeak && midVal > threshold) {
+        const peakTime = this.sampleTimes[midIdx];
+        const rr = peakTime - this.lastPeakTime;
+        this.lastPeakTime = peakTime;
 
-        // Valid physiological RR interval (between 285ms and 1500ms -> 40 to 210 BPM)
-        if (timeSinceLastPeak <= 1500) {
-          const instantBpm = 60000 / timeSinceLastPeak;
-
-          this.recentRRIntervals.push(instantBpm);
-          if (this.recentRRIntervals.length > 7) {
+        // Valid physiological RR interval: 280ms (214 BPM) to 1500ms (40 BPM)
+        if (rr >= 280 && rr <= 1500) {
+          this.recentRRIntervals.push(rr);
+          if (this.recentRRIntervals.length > 5) {
             this.recentRRIntervals.shift();
           }
 
-          // Use median of recent RR intervals for outlier rejection
+          // Weighted median / average filter for smooth BPM
           const sorted = [...this.recentRRIntervals].sort((a, b) => a - b);
-          this.currentBpm = Math.round(sorted[Math.floor(sorted.length / 2)]);
+          const medianRR = sorted[Math.floor(sorted.length / 2)];
+          const instantBpm = Math.round(60000 / medianRR);
 
-          // Trigger systolic beat event!
-          this.callbacks.onBeat(this.currentBpm, midTime);
+          if (instantBpm >= 42 && instantBpm <= 200) {
+            this.currentBpm = instantBpm;
+            this.callbacks.onBeat(instantBpm, peakTime);
+          }
         }
       }
     }
   }
 
   /**
-   * Stops camera, turns off torch, and releases media resources
+   * Stops processing, releases camera hardware, and turns off flashlight
    */
   public stop(): void {
     this.isRunning = false;
 
-    if (this.animationFrameId !== null) {
+    if (this.torchRetryTimer) {
+      clearTimeout(this.torchRetryTimer);
+      this.torchRetryTimer = null;
+    }
+
+    if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
 
+    // Turn off hardware flashlight immediately
+    this.applyTorch(false).catch(() => {});
+
     if (this.videoTrack) {
-      this.applyTorch(false).catch(() => {});
       this.videoTrack.stop();
       this.videoTrack = null;
     }

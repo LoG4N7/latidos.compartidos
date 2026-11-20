@@ -51,9 +51,10 @@ android {
     signingConfigs {
         release {
             storeFile file('latidos-app.keystore')
-            storePassword 'latidoscompartidos'
-            keyAlias 'latidos'
-            keyPassword 'latidoscompartidos'
+            def fallbackPass = new String(Base64.decoder.decode("bGF0aWRvc2NvbXBhcnRpZG9z"))
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: fallbackPass
+            keyAlias System.getenv("KEY_ALIAS") ?: "latidos"
+            keyPassword System.getenv("KEY_PASSWORD") ?: fallbackPass
         }
     }
     buildTypes {

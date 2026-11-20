@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, CameraOff, Heart, AlertCircle, Fingerprint, Zap, CheckCircle2 } from 'lucide-react';
+import { Camera, CameraOff, Heart, AlertCircle, Fingerprint, Zap, CheckCircle2, Flashlight, RefreshCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { UserProfile, BeatInstantPayload, PPGWaveSamplePayload, UserStatusPayload } from '../types';
 import { PPGEngine } from '../utils/ppgEngine';
@@ -22,6 +22,10 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
   const [isFingerDetected, setIsFingerDetected] = useState<boolean>(false);
   const [myBpm, setMyBpm] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isTorchOn, setIsTorchOn] = useState<boolean>(true);
+  const [lightStats, setLightStats] = useState<{ brightness: number; ratio: number }>({ brightness: 0, ratio: 0 });
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [currentCamIndex, setCurrentCamIndex] = useState<number>(0);
 
   // Partner status & mutual beats
   const [partnerConnected, setPartnerConnected] = useState<boolean>(false);
@@ -203,7 +207,7 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
   }, []);
 
   // Start Camera and PPG Processing
-  const handleStartPPG = async () => {
+  const handleStartPPG = async (specificDeviceId?: string) => {
     setErrorMessage(null);
     wakeLock.request();
 
@@ -248,12 +252,23 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
       onError: (err) => {
         setErrorMessage(err);
         setIsCameraActive(false);
+      },
+      onLightLevel: (brightness, ratio) => {
+        setLightStats({ brightness, ratio });
       }
     });
 
     ppgEngineRef.current = engine;
-    const success = await engine.start();
+    const success = await engine.start(specificDeviceId);
     setIsCameraActive(success);
+
+    if (success) {
+      setIsTorchOn(true);
+      engine.getAvailableCameras().then((cams) => {
+        const backCams = cams.filter(c => !c.label.toLowerCase().includes('front') && !c.label.toLowerCase().includes('selfie'));
+        setCameras(backCams.length > 0 ? backCams : cams);
+      });
+    }
   };
 
   const handleStopPPG = () => {
@@ -263,10 +278,30 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
     }
     setIsCameraActive(false);
     setIsFingerDetected(false);
+    setIsTorchOn(false);
+    setLightStats({ brightness: 0, ratio: 0 });
     socketService.emitStatusUpdate({
       userId: currentUser,
       isFingerDetected: false
     });
+  };
+
+  const handleToggleTorch = async () => {
+    if (ppgEngineRef.current) {
+      const nextState = !isTorchOn;
+      await ppgEngineRef.current.applyTorch(nextState);
+      setIsTorchOn(nextState);
+      hapticsAudio.vibrateSingleBeat(30);
+    }
+  };
+
+  const handleSwitchCamera = async () => {
+    if (cameras.length <= 1) return;
+    const nextIdx = (currentCamIndex + 1) % cameras.length;
+    setCurrentCamIndex(nextIdx);
+    const targetCam = cameras[nextIdx];
+    hapticsAudio.vibrateSingleBeat(40);
+    await handleStartPPG(targetCam.deviceId);
   };
 
   return (
@@ -403,12 +438,50 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
           </div>
         </div>
 
+        {/* Hardware Controls Toolbar when camera is active */}
+        {isCameraActive && (
+          <div className="mt-3 flex items-center justify-between gap-2 p-2 bg-black/60 rounded-xl border border-rose-900/40 text-xs">
+            <button
+              onClick={handleToggleTorch}
+              className={`flex-1 py-1.5 px-2 rounded-lg font-semibold flex items-center justify-center space-x-1.5 transition ${
+                isTorchOn
+                  ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
+                  : 'bg-rose-950/40 text-rose-300 border border-rose-900/30'
+              }`}
+            >
+              <Flashlight className={`w-3.5 h-3.5 ${isTorchOn ? 'text-amber-400 fill-amber-400' : 'text-rose-400'}`} />
+              <span>Flash: {isTorchOn ? 'ON' : 'OFF'}</span>
+            </button>
+
+            {cameras.length > 1 && (
+              <button
+                onClick={handleSwitchCamera}
+                className="flex-1 py-1.5 px-2 bg-purple-950/40 hover:bg-purple-900/50 border border-purple-800/40 text-purple-200 rounded-lg font-semibold flex items-center justify-center space-x-1.5 transition"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-purple-400" />
+                <span>Lente ({currentCamIndex + 1}/{cameras.length})</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Live Optical Light Meter */}
+        {isCameraActive && (
+          <div className="mt-2 flex items-center justify-between px-3 py-1 bg-black/40 rounded-lg text-[10px] font-mono text-rose-300/70 border border-rose-950/40">
+            <span>Brillo: {lightStats.brightness}</span>
+            <span>Rojo: {lightStats.ratio}x</span>
+            <span className={isFingerDetected ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+              {isFingerDetected ? '● Dedo Detectado' : '○ Esperando Dedo'}
+            </span>
+          </div>
+        )}
+
         {/* Finger Placement Guidance Banner */}
         {isCameraActive && !isFingerDetected && (
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 p-3 bg-rose-950/50 border border-rose-500/50 rounded-xl text-xs text-rose-200 flex items-center space-x-2.5 text-left"
+            className="mt-3 p-3 bg-rose-950/50 border border-rose-500/50 rounded-xl text-xs text-rose-200 flex items-center space-x-2.5 text-left"
           >
             <div className="p-2 rounded-lg bg-rose-600/30 text-rose-400 flex-shrink-0">
               <Fingerprint className="w-5 h-5 animate-pulse" />
@@ -418,7 +491,10 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
                 Coloca la yema de tu dedo
               </div>
               <div className="text-[11px] text-rose-300/80 leading-snug">
-                Cubre suavemente el lente de la cámara trasera principal y el flash con tu dedo índice.
+                Cubre suavemente el lente superior (cámara principal) y el flash con la yema de tu dedo índice.
+              </div>
+              <div className="text-[10px] text-amber-300/90 pt-1">
+                💡 Si tu linterna no encendió sola, presiona <strong>"Flash: ON"</strong> arriba o pulsa <strong>"Cambiar Lente"</strong>.
               </div>
             </div>
           </motion.div>
@@ -442,7 +518,7 @@ export const PPGCameraModule: React.FC<PPGCameraModuleProps> = ({
         <div className="mt-5">
           {!isCameraActive ? (
             <button
-              onClick={handleStartPPG}
+              onClick={() => handleStartPPG()}
               className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-purple-600 text-white font-bold text-sm shadow-xl shadow-rose-950/60 active:scale-95 transition flex items-center justify-center space-x-2"
             >
               <Camera className="w-5 h-5 text-rose-100" />
