@@ -14,6 +14,7 @@ import {
   UserStatusPayload,
   RoomState
 } from './types.js';
+import { PulsoidBridge } from './pulsoidBridge.js';
 
 dotenv.config();
 
@@ -56,6 +57,11 @@ function getOrCreateRoom(pin: string): RoomState {
   return rooms.get(pin)!;
 }
 
+// Initialize 24/7 Pulsoid Widget Bridge (Automated Free Transmission)
+const defaultWidgetId = process.env.PULSOID_WIDGET_ID || 'latidos-compartidos';
+const pulsoidBridge = new PulsoidBridge(io, defaultWidgetId);
+pulsoidBridge.start();
+
 // REST Endpoints
 app.get('/health', (_req: Request, res: Response) => {
   res.json({
@@ -64,7 +70,28 @@ app.get('/health', (_req: Request, res: Response) => {
     version: '1.0.0',
     uptime: process.uptime(),
     activeRooms: rooms.size,
+    pulsoidBridge: pulsoidBridge.getStatus(),
     timestamp: Date.now()
+  });
+});
+
+// Pulsoid Bridge Status and Configuration Endpoints
+app.get('/api/pulsoid/status', (_req: Request, res: Response) => {
+  res.json(pulsoidBridge.getStatus());
+});
+
+app.post('/api/pulsoid/widget', (req: Request, res: Response) => {
+  const { widget, widgetUrl, widgetId } = req.body;
+  const target = widget || widgetUrl || widgetId;
+  if (!target || typeof target !== 'string') {
+    return res.status(400).json({ error: 'Se requiere el slug o URL del widget de Pulsoid' });
+  }
+
+  pulsoidBridge.setWidgetId(target);
+  return res.json({
+    success: true,
+    message: 'Widget de Pulsoid actualizado. Reconectando...',
+    status: pulsoidBridge.getStatus()
   });
 });
 
@@ -163,6 +190,17 @@ io.on('connection', (socket: Socket) => {
 
     // Notify partner in the room
     socket.to(pin).emit('partner_status_changed', initialStatus);
+
+    // If Pulsoid Bridge has a live/recent BPM from Demian, send it immediately
+    const bridgeStatus = pulsoidBridge.getStatus();
+    if (bridgeStatus.lastBpm && bridgeStatus.lastSeen && (Date.now() - bridgeStatus.lastSeen < 60000)) {
+      socket.emit('partner_band_heartbeat', {
+        userId: 'Demian',
+        bpm: bridgeStatus.lastBpm,
+        source: 'pulsoid',
+        timestamp: bridgeStatus.lastSeen
+      } as HeartbeatPayload);
+    }
 
     console.log(`[Socket] ${user} joined room ${pin} (${socket.id})`);
   });

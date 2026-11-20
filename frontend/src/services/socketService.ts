@@ -67,6 +67,10 @@ class SocketService {
       this.bandHeartbeatListeners.forEach((fn) => fn(data));
     });
 
+    this.socket.on('pulsoid_live_bpm', (data: HeartbeatPayload) => {
+      this.bandHeartbeatListeners.forEach((fn) => fn(data));
+    });
+
     this.socket.on('partner_beat_instant', (data: BeatInstantPayload) => {
       this.beatInstantListeners.forEach((fn) => fn(data));
     });

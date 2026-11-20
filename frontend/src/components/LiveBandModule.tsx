@@ -101,14 +101,28 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
           }
           setDemianSourceStatus(
             payload.source === 'pulsoid'
-              ? 'En vivo desde Pulsoid Token (Mi Band 9)'
+              ? 'En vivo desde Pulsoid (Xiaomi Band 9)'
               : payload.source === 'notification'
               ? 'En vivo desde Notificación Pulsoid (Mi Band 9)'
-              : 'Último latido de Demian / En reposo'
+              : 'Último latido de Demian'
           );
           setIsPartnerConnected(true);
         }
       });
+
+      // Quick fetch of server Pulsoid bridge for instant BPM display
+      const serverUrl = localStorage.getItem('latidos_server_url') || '';
+      const endpoint = serverUrl ? `${serverUrl.replace(/\/$/, '')}/api/pulsoid/status` : '/api/pulsoid/status';
+      fetch(endpoint)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.lastBpm && (Date.now() - (data.lastSeen || 0) < 180000)) {
+            setDemianBpm(data.lastBpm);
+            setDemianSourceStatus('En vivo desde Pulsoid (Xiaomi Band 9)');
+            setIsPartnerConnected(true);
+          }
+        })
+        .catch(() => {});
 
       return () => unsubPartner();
     }
@@ -218,18 +232,49 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
         </div>
       </div>
 
-      {/* Demian's Quick Synchronization Panel (Only visible to Demian) */}
+      {/* Demian's Automatic Widget Banner & Quick Calibration */}
       {isDemian && (
-        <div className="glass-panel rounded-2xl p-4 border border-rose-900/40 space-y-3 text-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-rose-200 font-bold">
-              <Bell className="w-4 h-4 text-rose-400" />
-              <span>Sincronizar con Notificación de Pulsoid:</span>
+        <div className="space-y-3">
+          {/* Automatic 24/7 Widget Status Card */}
+          <div className="glass-panel rounded-2xl p-4 border border-emerald-500/40 bg-gradient-to-br from-emerald-950/20 to-black/60 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-emerald-300 font-bold">
+                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span>Transmisión Automática 24/7 (Pulsoid Widget):</span>
+              </div>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                Activa
+              </span>
             </div>
-            <span className="text-xs font-mono font-bold text-rose-400">
-              {manualSyncBpm} BPM
-            </span>
+
+            <p className="text-[11px] text-emerald-100/80 leading-relaxed">
+              Verónica recibe tus latidos en tiempo real incluso si <strong>cierras esta app</strong>, siempre que tengas puesta tu Mi Band 9 con la app de Pulsoid abierta en tu teléfono.
+            </p>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] font-mono text-emerald-400/90 truncate max-w-[220px]">
+                Widget: {pulsoidService.getWidgetSlug()}
+              </span>
+              <button
+                onClick={onOpenPulsoidConfig}
+                className="text-[10px] text-emerald-300 hover:text-white underline font-medium"
+              >
+                Cambiar enlace / Modo
+              </button>
+            </div>
           </div>
+
+          {/* Optional Manual Stepper / Notification Sync */}
+          <div className="glass-panel rounded-2xl p-4 border border-rose-900/40 space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-rose-200 font-bold">
+                <Bell className="w-4 h-4 text-rose-400" />
+                <span>Calibración Manual / Sin Internet:</span>
+              </div>
+              <span className="text-xs font-mono font-bold text-rose-400">
+                {manualSyncBpm} BPM
+              </span>
+            </div>
 
           <p className="text-[11px] text-rose-300/70 leading-relaxed">
             Como la app de Pulsoid muestra tus BPM en la barra de notificaciones de tu teléfono, puedes ajustar o calibrar tu pulso base aquí con 1 toque (100% gratuito sin pagar el token):
@@ -308,7 +353,8 @@ export const LiveBandModule: React.FC<LiveBandModuleProps> = ({
             </div>
           )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* Partner Connection Banner */}
       <div className="glass-panel rounded-xl px-3.5 py-2.5 border border-rose-900/30 flex items-center justify-between text-xs">

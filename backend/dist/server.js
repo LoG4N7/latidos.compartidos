@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { PulsoidBridge } from './pulsoidBridge.js';
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +41,10 @@ function getOrCreateRoom(pin) {
     }
     return rooms.get(pin);
 }
+// Initialize 24/7 Pulsoid Widget Bridge (Automated Free Transmission)
+const defaultWidgetId = process.env.PULSOID_WIDGET_ID || 'latidos-compartidos';
+const pulsoidBridge = new PulsoidBridge(io, defaultWidgetId);
+pulsoidBridge.start();
 // REST Endpoints
 app.get('/health', (_req, res) => {
     res.json({
@@ -48,7 +53,25 @@ app.get('/health', (_req, res) => {
         version: '1.0.0',
         uptime: process.uptime(),
         activeRooms: rooms.size,
+        pulsoidBridge: pulsoidBridge.getStatus(),
         timestamp: Date.now()
+    });
+});
+// Pulsoid Bridge Status and Configuration Endpoints
+app.get('/api/pulsoid/status', (_req, res) => {
+    res.json(pulsoidBridge.getStatus());
+});
+app.post('/api/pulsoid/widget', (req, res) => {
+    const { widget, widgetUrl, widgetId } = req.body;
+    const target = widget || widgetUrl || widgetId;
+    if (!target || typeof target !== 'string') {
+        return res.status(400).json({ error: 'Se requiere el slug o URL del widget de Pulsoid' });
+    }
+    pulsoidBridge.setWidgetId(target);
+    return res.json({
+        success: true,
+        message: 'Widget de Pulsoid actualizado. Reconectando...',
+        status: pulsoidBridge.getStatus()
     });
 });
 // Pulsoid Proxy to fetch real-time data without CORS issues on mobile browsers
@@ -133,6 +156,16 @@ io.on('connection', (socket) => {
         });
         // Notify partner in the room
         socket.to(pin).emit('partner_status_changed', initialStatus);
+        // If Pulsoid Bridge has a live/recent BPM from Demian, send it immediately
+        const bridgeStatus = pulsoidBridge.getStatus();
+        if (bridgeStatus.lastBpm && bridgeStatus.lastSeen && (Date.now() - bridgeStatus.lastSeen < 60000)) {
+            socket.emit('partner_band_heartbeat', {
+                userId: 'Demian',
+                bpm: bridgeStatus.lastBpm,
+                source: 'pulsoid',
+                timestamp: bridgeStatus.lastSeen
+            });
+        }
         console.log(`[Socket] ${user} joined room ${pin} (${socket.id})`);
     });
     // Band module continuous BPM update
