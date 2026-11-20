@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Vibrate, Volume2, ShieldCheck, Watch, Download, Server, Check } from 'lucide-react';
-import type { UserProfile } from '../types';
+import { Vibrate, Volume2, ShieldCheck, Watch, Download, Server, Check, Sparkles, RefreshCw } from 'lucide-react';
+import type { UserProfile, AppVersionInfo } from '../types';
 import { hapticsAudio } from '../utils/hapticsAudio';
 import { wakeLock } from '../utils/wakeLock';
 import { socketService } from '../services/socketService';
+import { updateService, CURRENT_APP_VERSION } from '../services/updateService';
 
 interface SettingsPanelProps {
   currentUser: UserProfile;
@@ -11,6 +12,7 @@ interface SettingsPanelProps {
   pin: string;
   onOpenProfileModal: () => void;
   onOpenPulsoidModal: () => void;
+  onOpenUpdateModal?: (info: AppVersionInfo) => void;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -18,13 +20,34 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   partnerUser,
   pin,
   onOpenProfileModal,
-  onOpenPulsoidModal
+  onOpenPulsoidModal,
+  onOpenUpdateModal
 }) => {
   const [hapticsOn, setHapticsOn] = useState<boolean>(hapticsAudio.isHapticActive());
   const [audioOn, setAudioOn] = useState<boolean>(hapticsAudio.isAudioActive());
   const [wakeActive, setWakeActive] = useState<boolean>(wakeLock.isActive());
   const [serverUrl, setServerUrl] = useState<string>(() => socketService.getServerUrl() || 'http://192.168.0.5:3001');
   const [urlSaved, setUrlSaved] = useState<boolean>(false);
+  const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
+  const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(null);
+
+  const handleManualCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatusMessage(null);
+    hapticsAudio.vibrateSingleBeat(30);
+
+    const { hasUpdate, updateInfo } = await updateService.checkForUpdate(true);
+    setCheckingUpdate(false);
+
+    if (hasUpdate && updateInfo && onOpenUpdateModal) {
+      onOpenUpdateModal(updateInfo);
+    } else if (hasUpdate && updateInfo) {
+      updateService.downloadAndInstall(updateInfo.apkDownloadUrl);
+    } else {
+      setUpdateStatusMessage('¡Tienes la versión más reciente! ❤️');
+      setTimeout(() => setUpdateStatusMessage(null), 3000);
+    }
+  };
 
   const handleSaveServerUrl = () => {
     socketService.setServerUrl(serverUrl);
@@ -209,6 +232,43 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold text-xs shadow active:scale-95 transition"
         >
           Configurar
+        </button>
+      </div>
+
+      {/* In-App Updates Card */}
+      <div className="glass-panel rounded-2xl p-4 border border-rose-900/40 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-rose-300 font-bold">
+            <Sparkles className="w-4 h-4 text-rose-400" />
+            <span>Actualizaciones de la App</span>
+          </div>
+          <span className="text-[10px] bg-rose-950/60 border border-rose-800/40 px-2 py-0.5 rounded-full font-mono text-rose-300">
+            v{CURRENT_APP_VERSION}
+          </span>
+        </div>
+
+        <p className="text-[10px] text-rose-300/70 leading-relaxed">
+          Comprueba e instala las últimas mejoras para ti y Verónica directamente con 1 toque sin tener que buscar archivos en GitHub.
+        </p>
+
+        <button
+          onClick={handleManualCheckUpdate}
+          disabled={checkingUpdate}
+          className="w-full py-2.5 px-3 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white rounded-xl font-bold active:scale-95 transition flex items-center justify-center space-x-2 text-xs shadow-md shadow-rose-950/60 disabled:opacity-60"
+        >
+          {checkingUpdate ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Buscando actualizaciones...</span>
+            </>
+          ) : updateStatusMessage ? (
+            <span>{updateStatusMessage}</span>
+          ) : (
+            <>
+              <Download className="w-3.5 h-3.5" />
+              <span>Buscar Nueva Versión</span>
+            </>
+          )}
         </button>
       </div>
 

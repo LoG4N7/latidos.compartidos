@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -47,9 +50,33 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
+      - name: Preparar archivo APK para descarga
+        run: |
+          cp frontend/android/app/build/outputs/apk/debug/app-debug.apk Latidos-Compartidos.apk
+
       - name: Subir APK como Artefacto Descargable
         uses: actions/upload-artifact@v4
         with:
           name: Latidos-Compartidos-Demian-Veronica-APK
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          path: Latidos-Compartidos.apk
           retention-days: 30
+
+      - name: Publicar GitHub Release con Descarga Directa
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest
+          name: "Latidos Compartidos APK (Última Versión)"
+          body: |
+            ❤️ **Latidos Compartidos - Demian y Verónica**
+
+            Descarga directa del APK para instalar en tu teléfono Android:
+            - Pulsa en **`Latidos-Compartidos.apk`** para descargar directamente.
+            - Al finalizar la descarga, toca la notificación y presiona **Actualizar**.
+
+            ✨ *Incluye sincronización 24/7 con Xiaomi Smart Band 9 y widget de Pulsoid.*
+          files: Latidos-Compartidos.apk
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

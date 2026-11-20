@@ -59,3 +59,13 @@ export interface WeatherData {
   locationName: string;
   isLoaded: boolean;
 }
+
+export interface AppVersionInfo {
+  version: string;
+  versionCode: number;
+  releaseDate: string;
+  title: string;
+  releaseNotes: string[];
+  apkDownloadUrl: string;
+  isMandatory?: boolean;
+}

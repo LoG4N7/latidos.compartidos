@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { UserProfile } from './types';
+import type { UserProfile, AppVersionInfo } from './types';
 import { Header } from './components/Header';
 import { Navigation, type ActiveTab } from './components/Navigation';
 import { LiveBandModule } from './components/LiveBandModule';
@@ -7,7 +7,9 @@ import { PPGCameraModule } from './components/PPGCameraModule';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ProfileModal } from './components/ProfileModal';
 import { PulsoidConfigModal } from './components/PulsoidConfigModal';
+import { UpdateModal } from './components/UpdateModal';
 import { socketService } from './services/socketService';
+import { updateService } from './services/updateService';
 import { wakeLock } from './utils/wakeLock';
 import { hapticsAudio } from './utils/hapticsAudio';
 
@@ -30,9 +32,25 @@ export const App: React.FC = () => {
     return !localStorage.getItem('latidos_profile');
   });
   const [isPulsoidModalOpen, setIsPulsoidModalOpen] = useState<boolean>(false);
+  const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
 
   // Connection state
   const [isSocketConnected, setIsSocketConnected] = useState<boolean>(false);
+
+  // Automatic In-App Update check on launch
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateService.checkForUpdate().then(({ hasUpdate, updateInfo: info }) => {
+        if (hasUpdate && info) {
+          setUpdateInfo(info);
+          setIsUpdateModalOpen(true);
+        }
+      });
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Initialize Socket connection
   useEffect(() => {
@@ -106,6 +124,10 @@ export const App: React.FC = () => {
             pin={pin}
             onOpenProfileModal={() => setIsProfileModalOpen(true)}
             onOpenPulsoidModal={() => setIsPulsoidModalOpen(true)}
+            onOpenUpdateModal={(info) => {
+              setUpdateInfo(info);
+              setIsUpdateModalOpen(true);
+            }}
           />
         )}
       </main>
@@ -130,6 +152,13 @@ export const App: React.FC = () => {
         isOpen={isPulsoidModalOpen}
         onClose={() => setIsPulsoidModalOpen(false)}
         onSaved={() => {}}
+      />
+
+      {/* In-App APK / Web Update Modal */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        updateInfo={updateInfo}
+        onClose={() => setIsUpdateModalOpen(false)}
       />
     </div>
   );

@@ -75,6 +75,31 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+// Latest Version and In-App Updater Endpoint
+const APP_VERSION_INFO = {
+  version: '1.1.0',
+  versionCode: 2,
+  releaseDate: '2026-11-20',
+  title: 'Actualización Automática 24/7 y Sincronización Directa',
+  releaseNotes: [
+    'Transmisión continua 24/7 de los latidos de Demian a Verónica usando el widget de Pulsoid (funciona incluso con la app cerrada).',
+    'Actualizaciones automáticas dentro de la app con un solo toque.',
+    'Reconexión ultrarrápida y calibración táctil optimizada.',
+    'Modo exclusivo para Demian (transmisor) y Verónica (receptora).'
+  ],
+  apkDownloadUrl: 'https://github.com/LoG4N7/latidos.compartidos/releases/latest/download/Latidos-Compartidos.apk',
+  isMandatory: false
+};
+
+app.get('/api/version', (_req: Request, res: Response) => {
+  res.json(APP_VERSION_INFO);
+});
+
+// Direct APK download redirect (for 1-click update from any browser or in-app)
+app.get('/download/apk', (_req: Request, res: Response) => {
+  res.redirect(APP_VERSION_INFO.apkDownloadUrl);
+});
+
 // Pulsoid Bridge Status and Configuration Endpoints
 app.get('/api/pulsoid/status', (_req: Request, res: Response) => {
   res.json(pulsoidBridge.getStatus());
