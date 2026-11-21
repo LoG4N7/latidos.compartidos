@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" style="background-color: #090308;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -21,20 +21,62 @@
     
     <!-- Android Chrome Theme -->
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Inline Critical Style to prevent white flash before CSS loads -->
+    <style>
+      html, body {
+        background-color: #090308 !important;
+        color: #ffe4e6;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow-x: hidden;
+      }
+      #root {
+        min-height: 100vh;
+        background-color: #090308;
+      }
+    </style>
   </head>
   <body class="bg-[#090308] text-rose-100 overflow-x-hidden antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Service Worker Registration -->
+    <!-- Native App vs PWA Service Worker Management -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('[PWA] Service Worker registrado:', reg.scope))
-            .catch((err) => console.warn('[PWA] Error al registrar Service Worker:', err));
-        });
-      }
+      (function() {
+        var isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform()) ||
+                          window.location.hostname === 'localhost' ||
+                          window.location.protocol === 'capacitor:';
+
+        if (isCapacitor) {
+          // Inside native Android APK: ensure NO service worker intercepts local assets
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) {
+                regs[i].unregister();
+              }
+            }).catch(function() {});
+          }
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              for (var i = 0; i < names.length; i++) {
+                caches.delete(names[i]);
+              }
+            }).catch(function() {});
+          }
+        } else {
+          // Inside regular web browser: register PWA service worker
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js')
+                .then(function(reg) { console.log('[PWA] Service Worker registrado:', reg.scope); })
+                .catch(function(err) { console.warn('[PWA] Error al registrar SW:', err); });
+            });
+          }
+        }
+      })();
     </script>
   </body>
 </html>

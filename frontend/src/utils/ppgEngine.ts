@@ -237,9 +237,9 @@ export class PPGEngine {
     }
 
     // Finger Presence Validation:
-    // 1. Adequate brightness from flash/ambient light: avgR > 35
-    // 2. Clear red dominance: redRatio > 1.15 OR (avgR > 60 and avgR > avgG * 1.2)
-    const fingerDetected = avgR > 35 && (redRatio > 1.15 || (avgR > 60 && avgR > avgG * 1.2));
+    // 1. Adequate brightness from flash/ambient light: avgR > 25
+    // 2. Clear red dominance: redRatio > 1.10 OR (avgR > 45 and avgR > avgG * 1.15)
+    const fingerDetected = avgR > 25 && (redRatio > 1.10 || (avgR > 45 && avgR > avgG * 1.15));
 
     if (fingerDetected !== this.isFingerPresent) {
       this.isFingerPresent = fingerDetected;

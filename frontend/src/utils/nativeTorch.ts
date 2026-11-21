@@ -1,38 +1,30 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
-
-interface NativeTorchPlugin {
-  setTorch(options: { enabled: boolean }): Promise<{ success: boolean; cameraId?: string; enabled: boolean }>;
-}
-
-const NativeTorch = registerPlugin<NativeTorchPlugin>('NativeTorch');
+/**
+ * Hardware Torch / Flashlight Helper
+ * Controls camera LED flash via WebRTC MediaStreamTrack constraints
+ * Designed to be 100% fail-safe across Android (Samsung One UI 6, MIUI, etc.) and browsers
+ */
 
 export async function setHardwareTorch(enabled: boolean, videoTrack?: MediaStreamTrack | null): Promise<boolean> {
-  let nativeSuccess = false;
+  if (!videoTrack) return false;
 
-  // 1. If running as native Android app (Capacitor), use native CameraManager torch
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const res = await NativeTorch.setTorch({ enabled });
-      if (res && res.success) {
-        nativeSuccess = true;
-        console.log('[NativeTorch] Flashlight hardware set to:', enabled);
-      }
-    } catch (err) {
-      console.warn('[NativeTorch] Native setTorch error:', err);
-    }
-  }
-
-  // 2. Also apply WebRTC track torch constraint
-  if (videoTrack) {
-    try {
+  try {
+    const capabilities = (videoTrack as any).getCapabilities?.() || {};
+    
+    // Check if torch is supported on this track
+    if ('torch' in capabilities || capabilities.torch !== undefined) {
       await (videoTrack as any).applyConstraints({
         advanced: [{ torch: enabled }]
       });
       return true;
-    } catch (e) {
-      // Ignore WebRTC constraint error if native already worked
     }
-  }
 
-  return nativeSuccess;
+    // Try applying constraint directly as fallback
+    await (videoTrack as any).applyConstraints({
+      advanced: [{ torch: enabled }]
+    });
+    return true;
+  } catch (e) {
+    console.warn('[Torch] Unable to set torch constraint on current track:', e);
+    return false;
+  }
 }

@@ -3,10 +3,14 @@ services:
     name: latidos-compartidos
     env: node
     plan: free
-    buildCommand: npm run install:all && npm run build
+    buildCommand: npm run build
     startCommand: npm start
     envVars:
       - key: PORT
         value: 3001
       - key: CLIENT_URL
         value: '*'
+      - key: NODE_ENV
+        value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: 'false'
