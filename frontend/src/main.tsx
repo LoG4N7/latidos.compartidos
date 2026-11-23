@@ -4,14 +4,23 @@ import './index.css';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-const rootElement = document.getElementById('root');
+function mountApp() {
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    createRoot(rootElement).render(
+      <StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </StrictMode>,
+    );
+  } else {
+    console.error('[Latidos] Root container #root not found.');
+  }
+}
 
-if (rootElement) {
-  createRoot(rootElement).render(
-    <StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </StrictMode>,
-  );
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mountApp);
+} else {
+  mountApp();
 }

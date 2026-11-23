@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" style="background-color: #090308;">
+<html lang="es" style="background-color: #090308; color: #ffe4e6;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -10,19 +10,19 @@
     <meta name="theme-color" content="#090308" />
     
     <!-- Web App Manifest -->
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
     
     <!-- iOS Safari Web App Support -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Latidos" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="icon.svg" />
     
     <!-- Android Chrome Theme -->
     <meta name="mobile-web-app-capable" content="yes" />
 
-    <!-- Inline Critical Style to prevent white flash before CSS loads -->
+    <!-- Inline Critical Style to guarantee background is NEVER white -->
     <style>
       html, body {
         background-color: #090308 !important;
@@ -37,46 +37,43 @@
         min-height: 100vh;
         background-color: #090308;
       }
+      @keyframes pulseHeart {
+        0%, 100% { transform: scale(1); opacity: 0.9; }
+        50% { transform: scale(1.15); opacity: 1; }
+      }
+      .initial-heart-beat {
+        animation: pulseHeart 1.2s infinite ease-in-out;
+      }
     </style>
   </head>
   <body class="bg-[#090308] text-rose-100 overflow-x-hidden antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Instant dark loading state rendered before JS bundles execute -->
+      <div style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #090308; color: #ffe4e6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; user-select: none;">
+        <div style="width: 64px; height: 64px; border-radius: 24px; background: rgba(225, 29, 72, 0.15); border: 1px solid rgba(225, 29, 72, 0.35); display: flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+          <svg class="initial-heart-beat" width="34" height="34" viewBox="0 0 24 24" fill="#f43f5e" stroke="#f43f5e" stroke-width="1.5">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+          </svg>
+        </div>
+        <p style="font-size: 15px; font-weight: 700; letter-spacing: 0.05em; margin: 0 0 4px 0; color: #ffffff;">Latidos Compartidos</p>
+        <p style="font-size: 11px; color: rgba(255, 228, 230, 0.65); margin: 0;">Conectando corazón...</p>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Native App vs PWA Service Worker Management -->
+    <!-- Global error trap for unexpected boot exceptions -->
     <script>
-      (function() {
-        var isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform()) ||
-                          window.location.hostname === 'localhost' ||
-                          window.location.protocol === 'capacitor:';
-
-        if (isCapacitor) {
-          // Inside native Android APK: ensure NO service worker intercepts local assets
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(regs) {
-              for (var i = 0; i < regs.length; i++) {
-                regs[i].unregister();
-              }
-            }).catch(function() {});
-          }
-          if ('caches' in window) {
-            caches.keys().then(function(names) {
-              for (var i = 0; i < names.length; i++) {
-                caches.delete(names[i]);
-              }
-            }).catch(function() {});
-          }
-        } else {
-          // Inside regular web browser: register PWA service worker
-          if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-              navigator.serviceWorker.register('/sw.js')
-                .then(function(reg) { console.log('[PWA] Service Worker registrado:', reg.scope); })
-                .catch(function(err) { console.warn('[PWA] Error al registrar SW:', err); });
-            });
-          }
+      window.addEventListener('error', function(e) {
+        console.error('[GlobalWindowError]', e.message, e.filename, e.lineno);
+        var root = document.getElementById('root');
+        if (root && (!root.children || root.children.length <= 1)) {
+          var errBox = document.createElement('div');
+          errBox.style.cssText = 'position:fixed;bottom:20px;left:20px;right:20px;background:rgba(20,5,10,0.95);border:1px solid #e11d48;border-radius:16px;padding:16px;color:#fff;font-size:12px;z-index:99999;font-family:sans-serif;box-shadow:0 10px 25px rgba(0,0,0,0.8);text-align:center;';
+          errBox.innerHTML = '<strong style="color:#f43f5e;display:block;margin-bottom:6px;">Detalle al iniciar:</strong><p style="font-family:monospace;font-size:10px;color:#fda4af;margin:0 0 12px 0;word-break:break-all;">' + (e.message || 'Error desconocido') + '</p><button onclick="localStorage.clear();location.reload();" style="background:#e11d48;border:none;color:#fff;padding:8px 16px;border-radius:8px;font-weight:bold;font-size:11px;cursor:pointer;">Reiniciar App</button>';
+          document.body.appendChild(errBox);
         }
-      })();
+      });
     </script>
   </body>
 </html>
